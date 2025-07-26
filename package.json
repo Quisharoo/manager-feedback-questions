@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "echo \"No tests yet\" && exit 0"
+    "test": "jest"
   },
   "keywords": [],
   "author": "",
@@ -13,5 +13,11 @@
   "type": "commonjs",
   "dependencies": {
     "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "jsdom": "^22.1.0",
+    "supertest": "^7.1.3"
   }
 }
