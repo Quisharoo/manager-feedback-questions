@@ -1,0 +1,17 @@
+{
+  "name": "manager-feedback-questions",
+  "version": "1.0.0",
+  "description": "Simple Express server to serve the Manager Feedback Questions site",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "echo \"No tests yet\" && exit 0"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "express": "^5.1.0"
+  }
+}
