@@ -37,10 +37,16 @@
         
         const questionContainer = document.getElementById('question-container');
         const getQuestionBtn = document.getElementById('getQuestionBtn');
-        
+        let questionTimeout;
+        let pulseTimeout;
+
         getQuestionBtn.addEventListener('click', () => {
             // Remove pulse animation
             getQuestionBtn.classList.remove('pulse');
+
+            // Clear existing timeouts to avoid stacking them on rapid clicks
+            clearTimeout(questionTimeout);
+            clearTimeout(pulseTimeout);
             
             // Add loading state
             questionContainer.innerHTML = `
@@ -51,11 +57,11 @@
             `;
             
             // Simulate loading delay
-            setTimeout(() => {
+            questionTimeout = setTimeout(() => {
                 const randomIndex = Math.floor(Math.random() * questions.length);
                 const randomQuestion = questions[randomIndex];
                 
-                const themeClass = themeColors[randomQuestion.theme];
+                const themeClass = themeColors[randomQuestion.theme] || 'bg-gray-100 text-gray-800';
                 questionContainer.innerHTML = `
                     <div class="${themeClass.split(' ')[1]} text-4xl mb-4">
                         <i class="fas fa-quote-left"></i>
@@ -74,7 +80,7 @@
                 }, 300);
                 
                 // Re-add pulse animation after 2 seconds
-                setTimeout(() => {
+                pulseTimeout = setTimeout(() => {
                     getQuestionBtn.classList.add('pulse');
                 }, 2000);
             }, 800);
