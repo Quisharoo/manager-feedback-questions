@@ -1,19 +1,160 @@
-<!doctype html>
-<html>
-	<head>
-		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width" />
-		<title>My static Space</title>
-		<link rel="stylesheet" href="style.css" />
-	</head>
-	<body>
-		<div class="card">
-			<h1>Welcome to your static Space!</h1>
-			<p>You can modify this app directly by editing <i>index.html</i> in the Files and versions tab.</p>
-			<p>
-				Also don't forget to check the
-				<a href="https://huggingface.co/docs/hub/spaces" target="_blank">Spaces documentation</a>.
-			</p>
-		</div>
-	</body>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manager Feedback Questions</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
+        
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #f8fafc;
+        }
+        
+        .question-card {
+            min-height: 200px;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.3);
+        }
+        
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.05);
+            }
+            100% {
+                transform: scale(1);
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+    <div class="w-full max-w-2xl mx-auto">
+        <div class="text-center mb-8">
+            <h1 class="text-4xl md:text-5xl font-bold text-indigo-600 mb-2">Manager Feedback Questions</h1>
+            <p class="text-gray-600 text-lg">Get questions to improve your management and team dynamics</p>
+        </div>
+        
+        <div class="bg-white rounded-xl shadow-xl overflow-hidden mb-8 question-card flex items-center justify-center">
+            <div class="p-8 text-center" id="question-container">
+                <div class="text-indigo-400 text-6xl mb-4">
+                    <i class="fas fa-question-circle"></i>
+                </div>
+                <p class="text-gray-500 italic">Press the button below to get a feedback question</p>
+            </div>
+        </div>
+        
+        <div class="text-center">
+            <button id="getQuestionBtn" class="btn-primary text-white font-bold py-4 px-8 rounded-full text-lg shadow-lg pulse">
+                <i class="fas fa-random mr-2"></i> Get Random Question
+            </button>
+        </div>
+    </div>
+    
+    <footer class="mt-12 text-center text-gray-500 text-sm">
+        <p>Made with <i class="fas fa-heart text-red-500"></i> for meaningful conversations</p>
+    </footer>
+
+    <script>
+        const themeColors = {
+            "Vision + Priorities": "bg-indigo-100 text-indigo-800",
+            "Work Style": "bg-blue-100 text-blue-800",
+            "Support + Load-Balancing": "bg-green-100 text-green-800",
+            "Coaching + Development": "bg-yellow-100 text-yellow-800",
+            "Work Conditions": "bg-purple-100 text-purple-800",
+            "Team + Dynamics": "bg-pink-100 text-pink-800",
+            "Efficiency + Frustrations": "bg-red-100 text-red-800"
+        };
+
+        const questions = [
+            { theme: "Vision + Priorities", text: "Am I giving you enough information to do your job well?" },
+            { theme: "Vision + Priorities", text: "Would you like more or less direction from me right now?" },
+            { theme: "Vision + Priorities", text: "Do you feel clear on where we're headed and why?" },
+            { theme: "Vision + Priorities", text: "Are there any priorities I can clarify for you?" },
+            { theme: "Work Style", text: "What part of my communication style makes your job harder than it should?" },
+            { theme: "Work Style", text: "Is there a decision I've made recently that you disagreed with—or didn't understand?" },
+            { theme: "Work Style", text: "What's something I could stop doing that would make things easier for you?" },
+            { theme: "Support + Load-Balancing", text: "Do you feel like you're spread too thin right now?" },
+            { theme: "Support + Load-Balancing", text: "Is there anything I could take off your plate this week?" },
+            { theme: "Support + Load-Balancing", text: "Have I been mindful enough of timelines and bandwidth?" },
+            { theme: "Support + Load-Balancing", text: "Would it help to reprioritize anything?" },
+            { theme: "Coaching + Development", text: "What aspect of your role would you like more coaching on?" },
+            { theme: "Coaching + Development", text: "Are there any skills you've been wanting to build but haven't had time?" },
+            { theme: "Coaching + Development", text: "Is there a challenge you're facing that we could unpack together?" },
+            { theme: "Coaching + Development", text: "What's a decision you're stuck on that we could talk through?" },
+            { theme: "Work Conditions", text: "Am I interrupting you too often with meetings or requests?" },
+            { theme: "Work Conditions", text: "Do you feel like you have enough focus time to get real work done?" },
+            { theme: "Work Conditions", text: "Is there any tool, resource, or system that's making your job harder than it needs to be?" },
+            { theme: "Team + Dynamics", text: "Are there any relationships or team dynamics that have felt tricky lately?" },
+            { theme: "Team + Dynamics", text: "Is there a conversation we haven't had yet that we probably should?" },
+            { theme: "Team + Dynamics", text: "What's something you wish people talked about more openly on the team?" },
+            { theme: "Efficiency + Frustrations", text: "What's one thing that's been frustrating you the past few weeks?" },
+            { theme: "Efficiency + Frustrations", text: "What are your biggest time-wasters right now?" },
+            { theme: "Efficiency + Frustrations", text: "What's something you wish we did more efficiently as a team?" }
+        ];
+        
+        const questionContainer = document.getElementById('question-container');
+        const getQuestionBtn = document.getElementById('getQuestionBtn');
+        
+        getQuestionBtn.addEventListener('click', () => {
+            // Remove pulse animation
+            getQuestionBtn.classList.remove('pulse');
+            
+            // Add loading state
+            questionContainer.innerHTML = `
+                <div class="flex flex-col items-center">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500 mb-4"></div>
+                    <p class="text-gray-500">Finding your question...</p>
+                </div>
+            `;
+            
+            // Simulate loading delay
+            setTimeout(() => {
+                const randomIndex = Math.floor(Math.random() * questions.length);
+                const randomQuestion = questions[randomIndex];
+                
+                const themeClass = themeColors[randomQuestion.theme];
+                questionContainer.innerHTML = `
+                    <div class="${themeClass.split(' ')[1]} text-4xl mb-4">
+                        <i class="fas fa-quote-left"></i>
+                    </div>
+                    <p class="text-sm uppercase tracking-wider ${themeClass} px-2 py-1 rounded-full inline-block mb-2">${randomQuestion.theme}</p>
+                    <p class="text-xl md:text-2xl text-gray-800 font-medium mb-4">${randomQuestion.text}</p>
+                    <div class="${themeClass.split(' ')[1]} text-4xl">
+                        <i class="fas fa-quote-right"></i>
+                    </div>
+                `;
+                
+                // Add slight animation to question card
+                document.querySelector('.question-card').classList.add('transform', 'scale-105');
+                setTimeout(() => {
+                    document.querySelector('.question-card').classList.remove('transform', 'scale-105');
+                }, 300);
+                
+                // Re-add pulse animation after 2 seconds
+                setTimeout(() => {
+                    getQuestionBtn.classList.add('pulse');
+                }, 2000);
+            }, 800);
+        });
+    </script>
+<p style="border-radius: 8px; text-align: center; font-size: 12px; color: #fff; margin-top: 16px;position: fixed; left: 8px; bottom: 8px; z-index: 10; background: rgba(0, 0, 0, 0.8); padding: 4px 8px;">Made with <img src="https://enzostvs-deepsite.hf.space/logo.svg" alt="DeepSite Logo" style="width: 16px; height: 16px; vertical-align: middle;display:inline-block;margin-right:3px;filter:brightness(0) invert(1);"><a href="https://enzostvs-deepsite.hf.space" style="color: #fff;text-decoration: underline;" target="_blank" >DeepSite</a> - 🧬 <a href="https://enzostvs-deepsite.hf.space?remix=seakueue/manager-feedback-questions" style="color: #fff;text-decoration: underline;" target="_blank" >Remix</a></p></body>
 </html>
