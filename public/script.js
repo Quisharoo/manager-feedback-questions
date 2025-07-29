@@ -37,51 +37,108 @@
         
         const questionContainer = document.getElementById('question-container');
         const getQuestionBtn = document.getElementById('getQuestionBtn');
+        const prevQuestionBtn = document.getElementById('prevQuestionBtn');
         let questionTimeout;
         let pulseTimeout;
 
+        let availableQuestions = [...questions];
+        let history = [];
+        let historyIndex = -1;
+
+        function updatePrevButton() {
+            if (history.length > 1) {
+                prevQuestionBtn.classList.remove('hidden');
+                if (historyIndex === 0) {
+                    prevQuestionBtn.setAttribute('disabled', '');
+                    prevQuestionBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                } else {
+                    prevQuestionBtn.removeAttribute('disabled');
+                    prevQuestionBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                }
+            } else {
+                prevQuestionBtn.classList.add('hidden');
+            }
+        }
+
+        function renderQuestion(question) {
+            const themeClass = themeColors[question.theme] || 'bg-gray-100 text-gray-800';
+            questionContainer.innerHTML = `
+                <div class="${themeClass.split(' ')[1]} text-4xl mb-4">
+                    <i class="fas fa-quote-left"></i>
+                </div>
+                <p class="text-sm uppercase tracking-wider ${themeClass} px-2 py-1 rounded-full inline-block mb-2">${question.theme}</p>
+                <p class="text-xl md:text-2xl text-gray-800 font-medium mb-4">${question.text}</p>
+                <div class="${themeClass.split(' ')[1]} text-4xl">
+                    <i class="fas fa-quote-right"></i>
+                </div>
+            `;
+
+            document.querySelector('.question-card').classList.add('transform', 'scale-105');
+            setTimeout(() => {
+                document.querySelector('.question-card').classList.remove('transform', 'scale-105');
+            }, 300);
+        }
+
         getQuestionBtn.addEventListener('click', () => {
-            // Remove pulse animation
             getQuestionBtn.classList.remove('pulse');
 
-            // Clear existing timeouts to avoid stacking them on rapid clicks
             clearTimeout(questionTimeout);
             clearTimeout(pulseTimeout);
-            
-            // Add loading state
+
             questionContainer.innerHTML = `
                 <div class="flex flex-col items-center">
                     <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500 mb-4"></div>
                     <p class="text-gray-500">Finding your question...</p>
                 </div>
             `;
-            
-            // Simulate loading delay
+
             questionTimeout = setTimeout(() => {
-                const randomIndex = Math.floor(Math.random() * questions.length);
-                const randomQuestion = questions[randomIndex];
-                
-                const themeClass = themeColors[randomQuestion.theme] || 'bg-gray-100 text-gray-800';
-                questionContainer.innerHTML = `
-                    <div class="${themeClass.split(' ')[1]} text-4xl mb-4">
-                        <i class="fas fa-quote-left"></i>
-                    </div>
-                    <p class="text-sm uppercase tracking-wider ${themeClass} px-2 py-1 rounded-full inline-block mb-2">${randomQuestion.theme}</p>
-                    <p class="text-xl md:text-2xl text-gray-800 font-medium mb-4">${randomQuestion.text}</p>
-                    <div class="${themeClass.split(' ')[1]} text-4xl">
-                        <i class="fas fa-quote-right"></i>
-                    </div>
-                `;
-                
-                // Add slight animation to question card
-                document.querySelector('.question-card').classList.add('transform', 'scale-105');
-                setTimeout(() => {
-                    document.querySelector('.question-card').classList.remove('transform', 'scale-105');
-                }, 300);
-                
-                // Re-add pulse animation after 2 seconds
+                let nextQuestion;
+                if (historyIndex < history.length - 1) {
+                    historyIndex++;
+                    nextQuestion = history[historyIndex];
+                } else {
+                    if (availableQuestions.length === 0) {
+                        availableQuestions = [...questions];
+                    }
+                    const randomIndex = Math.floor(Math.random() * availableQuestions.length);
+                    nextQuestion = availableQuestions.splice(randomIndex, 1)[0];
+                    history.push(nextQuestion);
+                    historyIndex = history.length - 1;
+                }
+
+                renderQuestion(nextQuestion);
+
                 pulseTimeout = setTimeout(() => {
                     getQuestionBtn.classList.add('pulse');
                 }, 2000);
+
+                updatePrevButton();
+            }, 800);
+        });
+
+        prevQuestionBtn.addEventListener('click', () => {
+            if (historyIndex <= 0) return;
+            getQuestionBtn.classList.remove('pulse');
+            clearTimeout(questionTimeout);
+            clearTimeout(pulseTimeout);
+
+            questionContainer.innerHTML = `
+                <div class="flex flex-col items-center">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500 mb-4"></div>
+                    <p class="text-gray-500">Finding your question...</p>
+                </div>
+            `;
+
+            questionTimeout = setTimeout(() => {
+                historyIndex--;
+                const prevQuestion = history[historyIndex];
+                renderQuestion(prevQuestion);
+
+                pulseTimeout = setTimeout(() => {
+                    getQuestionBtn.classList.add('pulse');
+                }, 2000);
+
+                updatePrevButton();
             }, 800);
         });
