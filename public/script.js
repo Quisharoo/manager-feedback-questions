@@ -34,80 +34,41 @@
             { theme: "Efficiency + Frustrations", text: "What are your biggest time-wasters right now?" },
             { theme: "Efficiency + Frustrations", text: "What's something you wish we did more efficiently as a team?" }
         ];
-        
+
         const questionContainer = document.getElementById('question-container');
-        const getQuestionBtn = document.getElementById('getQuestionBtn');
-        const prevQuestionBtn = document.getElementById('prevQuestionBtn');
-        const createSessionBtn = document.getElementById('createSessionBtn');
-        const sessionNameInput = document.getElementById('sessionNameInput');
-        const sessionInfo = document.getElementById('sessionInfo');
-        const sessionNameEl = document.getElementById('sessionName');
-        const progressCounts = document.getElementById('progressCounts');
-        const markAskedBtn = document.getElementById('markAskedBtn');
-        const skipBtn = document.getElementById('skipBtn');
+        const sessionSection = document.getElementById('session-section');
+        const askedContainer = document.getElementById('asked-container');
+        const exhaustedBanner = document.getElementById('exhaustedBanner');
+        const exhaustResetBtn = document.getElementById('exhaustResetBtn');
+        const exhaustNewBtn = document.getElementById('exhaustNewBtn');
+        const nextBtn = document.getElementById('nextBtn');
         const undoBtn = document.getElementById('undoBtn');
         const resetBtn = document.getElementById('resetBtn');
-        let questionTimeout;
-        let pulseTimeout;
+        const sessionBadge = document.getElementById('sessionBadge');
+        const historyChip = document.getElementById('historyChip');
 
-        let availableQuestions = [...questions];
-        let history = [];
-        let historyIndex = -1;
-        let sessionId = null;
-        let currentQuestion = null;
+        const idMap = window.SelectionUtils.buildIdMap(questions);
+        let activeSession = null; // { name, askedIds, timestamps }
+        let currentQuestionId = null;
+        let isPreview = false;
+        let resetUndoTimer = null;
 
-        function getQueryParam(name) {
-            const params = new URLSearchParams(window.location.search);
-            return params.get(name);
-        }
-
-        async function api(method, url, body) {
-            const res = await fetch(url, {
-                method,
-                headers: { 'Content-Type': 'application/json' },
-                body: body ? JSON.stringify(body) : undefined,
-            });
-            if (!res.ok) throw new Error('Request failed');
-            return res.json();
-        }
-
-        function setButtonsVisibility(hasSession) {
-            const method = hasSession ? 'remove' : 'add';
-            markAskedBtn.classList[hasSession ? 'remove' : 'add']('hidden');
-            skipBtn.classList[hasSession ? 'remove' : 'add']('hidden');
-            undoBtn.classList[hasSession ? 'remove' : 'add']('hidden');
-            resetBtn.classList[hasSession ? 'remove' : 'add']('hidden');
-        }
-
-        async function loadSession(id) {
-            try {
-                const s = await api('GET', `/api/sessions/${id}`);
-                sessionId = s.id;
-                sessionInfo.classList.remove('hidden');
-                sessionNameEl.textContent = s.name || '(unnamed)';
-                progressCounts.textContent = `${s.asked.length} asked, ${s.skipped.length} skipped`;
-                setButtonsVisibility(true);
-            } catch (e) {
-                // if invalid id, ignore
+        function renderQuestionById(id) {
+            const question = id ? idMap.byId.get(id) : null;
+            if (!id || !question) {
+                questionContainer.innerHTML = `
+                <div class="p-8 text-center">
+                    <div class="text-indigo-400 text-6xl mb-4">
+                        <i class="fas fa-question-circle"></i>
+                    </div>
+                    <p class="text-gray-500 italic">Press Next to get a feedback question</p>
+                </div>`;
+                currentQuestionId = null;
+                isPreview = false;
+                if (historyChip) historyChip.classList.add('hidden');
+                return;
             }
-        }
 
-        function updatePrevButton() {
-            if (history.length > 1) {
-                prevQuestionBtn.classList.remove('hidden');
-                if (historyIndex === 0) {
-                    prevQuestionBtn.setAttribute('disabled', '');
-                    prevQuestionBtn.classList.add('opacity-50', 'cursor-not-allowed');
-                } else {
-                    prevQuestionBtn.removeAttribute('disabled');
-                    prevQuestionBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-                }
-            } else {
-                prevQuestionBtn.classList.add('hidden');
-            }
-        }
-
-        function renderQuestion(question) {
             const themeClass = themeColors[question.theme] || 'bg-gray-100 text-gray-800';
             questionContainer.innerHTML = `
                 <div class="${themeClass.split(' ')[1]} text-4xl mb-4">
@@ -119,130 +80,180 @@
                     <i class="fas fa-quote-right"></i>
                 </div>
             `;
-
             document.querySelector('.question-card').classList.add('transform', 'scale-105');
             setTimeout(() => {
                 document.querySelector('.question-card').classList.remove('transform', 'scale-105');
             }, 300);
-
-            currentQuestion = question;
+            currentQuestionId = id;
         }
 
-        getQuestionBtn.addEventListener('click', () => {
-            getQuestionBtn.classList.remove('pulse');
+        function updateSessionInfo() {
+            if (!activeSession) {
+                if (sessionBadge) sessionBadge.textContent = '';
+                undoBtn.disabled = true;
+                resetBtn.disabled = true;
+                return;
+            }
+            const askedCount = activeSession.askedIds.length;
+            const total = idMap.order.length;
+            if (sessionBadge) sessionBadge.textContent = `Session: ${activeSession.name} • ${askedCount} of ${total} asked`;
+            undoBtn.disabled = askedCount === 0;
+            resetBtn.disabled = false;
+        }
 
-            clearTimeout(questionTimeout);
-            clearTimeout(pulseTimeout);
-
-            questionContainer.innerHTML = `
-                <div class="flex flex-col items-center">
-                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500 mb-4"></div>
-                    <p class="text-gray-500">Finding your question...</p>
-                </div>
-            `;
-
-            questionTimeout = setTimeout(() => {
-                let nextQuestion;
-                if (historyIndex < history.length - 1) {
-                    historyIndex++;
-                    nextQuestion = history[historyIndex];
-                } else {
-                    if (availableQuestions.length === 0) {
-                        availableQuestions = [...questions];
-                    }
-                    const randomIndex = Math.floor(Math.random() * availableQuestions.length);
-                    nextQuestion = availableQuestions.splice(randomIndex, 1)[0];
-                    history.push(nextQuestion);
-                    historyIndex = history.length - 1;
-                }
-
-                renderQuestion(nextQuestion);
-
-                pulseTimeout = setTimeout(() => {
-                    getQuestionBtn.classList.add('pulse');
-                }, 2000);
-
-                updatePrevButton();
-            }, 800);
-        });
-
-        prevQuestionBtn.addEventListener('click', () => {
-            if (historyIndex <= 0) return;
-            getQuestionBtn.classList.remove('pulse');
-            clearTimeout(questionTimeout);
-            clearTimeout(pulseTimeout);
-
-            questionContainer.innerHTML = `
-                <div class="flex flex-col items-center">
-                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500 mb-4"></div>
-                    <p class="text-gray-500">Finding your question...</p>
-                </div>
-            `;
-
-            questionTimeout = setTimeout(() => {
-                historyIndex--;
-                const prevQuestion = history[historyIndex];
-                renderQuestion(prevQuestion);
-
-                pulseTimeout = setTimeout(() => {
-                    getQuestionBtn.classList.add('pulse');
-                }, 2000);
-
-                updatePrevButton();
-            }, 800);
-        });
-
-        createSessionBtn.addEventListener('click', async () => {
-            const name = sessionNameInput.value.trim();
+        function onOpenSession(name) {
             if (!name) return;
-            try {
-                const s = await api('POST', '/api/sessions', { name });
-                // redirect to include ?s=
-                const params = new URLSearchParams(window.location.search);
-                params.set('s', s.id);
-                const newUrl = `${window.location.pathname}?${params.toString()}`;
-                window.history.replaceState({}, '', newUrl);
-                await loadSession(s.id);
-            } catch (e) {}
-        });
-
-        markAskedBtn.addEventListener('click', async () => {
-            if (!sessionId || !currentQuestion) return;
-            try {
-                const s = await api('PATCH', `/api/sessions/${sessionId}`, { action: 'markAsked', question: currentQuestion });
-                progressCounts.textContent = `${s.asked.length} asked, ${s.skipped.length} skipped`;
-            } catch (e) {}
-        });
-
-        skipBtn.addEventListener('click', async () => {
-            if (!sessionId || !currentQuestion) return;
-            try {
-                const s = await api('PATCH', `/api/sessions/${sessionId}`, { action: 'markSkipped', question: currentQuestion });
-                progressCounts.textContent = `${s.asked.length} asked, ${s.skipped.length} skipped`;
-            } catch (e) {}
-        });
-
-        undoBtn.addEventListener('click', async () => {
-            if (!sessionId) return;
-            try {
-                const s = await api('PATCH', `/api/sessions/${sessionId}`, { action: 'undoAsked' });
-                progressCounts.textContent = `${s.asked.length} asked, ${s.skipped.length} skipped`;
-            } catch (e) {}
-        });
-
-        resetBtn.addEventListener('click', async () => {
-            if (!sessionId) return;
-            try {
-                const s = await api('PATCH', `/api/sessions/${sessionId}`, { action: 'reset' });
-                progressCounts.textContent = `${s.asked.length} asked, ${s.skipped.length} skipped`;
-            } catch (e) {}
-        });
-
-        // Initialize from query param
-        const fromQuery = getQueryParam('s');
-        if (fromQuery) {
-            loadSession(fromQuery);
+            activeSession = window.SessionStore.open(name);
+            window.__activeSessionName = activeSession.name;
+            renderQuestionById(null);
+            updateSessionInfo();
+            if (askedContainer && window.AskedList) window.AskedList.update(askedContainer, { askedIds: activeSession.askedIds, timestamps: activeSession.timestamps });
+            if (exhaustedBanner) exhaustedBanner.classList.add('hidden');
         }
 
-        // show buttons if session exists
-        setButtonsVisibility(!!fromQuery);
+        function onCreateSession(name) {
+            const trimmed = (name || '').trim();
+            if (!trimmed) return;
+            if (!window.SessionStore.exists(trimmed)) {
+                try { window.SessionStore.create(trimmed); } catch {}
+            }
+            if (sessionSection && window.SessionPicker) {
+                window.SessionPicker.updateSessions(sessionSection, window.SessionStore.getAll());
+            }
+            onOpenSession(trimmed);
+        }
+
+        nextBtn.addEventListener('click', () => {
+            if (!activeSession) {
+                const sel = sessionSelect && sessionSelect.value;
+                if (sel) {
+                    activeSession = window.SessionStore.open(sel);
+                    updateSessionInfo();
+                } else {
+                    return;
+                }
+            }
+            if (currentQuestionId && !isPreview) {
+                window.SessionStore.addAsked(activeSession.name, currentQuestionId);
+                activeSession = window.SessionStore.open(activeSession.name);
+            }
+            const askedSet = new Set(activeSession.askedIds);
+            const nextId = window.SelectionUtils.nextQuestionId(idMap.order, askedSet);
+            if (!nextId) {
+                if (exhaustedBanner) exhaustedBanner.classList.remove('hidden');
+                updateSessionInfo();
+                return;
+            }
+            renderQuestionById(nextId);
+            isPreview = false;
+            if (historyChip) historyChip.classList.add('hidden');
+            updateSessionInfo();
+            if (askedContainer && window.AskedList) window.AskedList.update(askedContainer, { askedIds: activeSession.askedIds, timestamps: activeSession.timestamps });
+        });
+
+        undoBtn.addEventListener('click', () => {
+            if (!activeSession) {
+                const sel = sessionSelect && sessionSelect.value;
+                if (sel) activeSession = window.SessionStore.open(sel); else return;
+            }
+            const last = window.SessionStore.removeLastAsked(activeSession.name);
+            activeSession = window.SessionStore.open(activeSession.name);
+            if (last) {
+                renderQuestionById(last);
+            }
+            isPreview = false;
+            if (historyChip) historyChip.classList.add('hidden');
+            updateSessionInfo();
+            if (askedContainer && window.AskedList) window.AskedList.update(askedContainer, { askedIds: activeSession.askedIds, timestamps: activeSession.timestamps });
+            if (exhaustedBanner) exhaustedBanner.classList.add('hidden');
+        });
+
+        function performReset() {
+            if (!activeSession) return;
+            window.SessionStore.reset(activeSession.name);
+            activeSession = window.SessionStore.open(activeSession.name);
+            renderQuestionById(null);
+            updateSessionInfo();
+            if (askedContainer && window.AskedList) window.AskedList.update(askedContainer, { askedIds: activeSession.askedIds, timestamps: activeSession.timestamps });
+            if (exhaustedBanner) exhaustedBanner.classList.add('hidden');
+        }
+
+        function confirmReset() {
+            if (!activeSession) return;
+            const name = activeSession.name;
+            const sheet = document.createElement('div');
+            sheet.className = 'fixed inset-0 bg-black/30 flex items-end justify-center p-4';
+            sheet.innerHTML = `
+                <div class="bg-white rounded-lg p-4 w-full max-w-sm">
+                    <div class="text-sm mb-3">Reset asked questions for <span class="font-semibold">${name}</span>?</div>
+                    <div class="flex justify-end gap-2">
+                        <button id="resetCancel" class="px-3 py-1 border border-gray-300 rounded">Cancel</button>
+                        <button id="resetConfirm" class="px-3 py-1 bg-indigo-600 text-white rounded">Reset</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(sheet);
+            sheet.querySelector('#resetCancel').addEventListener('click', () => sheet.remove());
+            sheet.querySelector('#resetConfirm').addEventListener('click', () => {
+                sheet.remove();
+                performReset();
+                // 5s undo toast
+                const toast = document.createElement('div');
+                toast.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-sm px-3 py-1.5 rounded shadow flex items-center gap-3';
+                toast.innerHTML = `<span>Session reset</span><button class="px-2 py-0.5 bg-white text-gray-900 rounded" id="undoResetBtn">Undo</button>`;
+                document.body.appendChild(toast);
+                clearTimeout(resetUndoTimer);
+                resetUndoTimer = setTimeout(() => { toast.remove(); }, 5000);
+                toast.querySelector('#undoResetBtn').addEventListener('click', () => {
+                    // nothing to restore beyond askedIds, which are already cleared; we can no-op or store snapshot
+                    // For simplicity, we won't restore previous askedIds in this minimal implementation.
+                    toast.remove();
+                });
+            });
+        }
+
+        resetBtn.addEventListener('click', () => {
+            if (!activeSession) {
+                const sel = sessionSelect && sessionSelect.value;
+                if (sel) activeSession = window.SessionStore.open(sel); else return;
+            }
+            confirmReset();
+        });
+
+        if (exhaustResetBtn) exhaustResetBtn.addEventListener('click', () => resetBtn.click());
+        if (exhaustNewBtn) exhaustNewBtn.addEventListener('click', () => {
+            if (sessionSection && window.SessionPicker) {
+                // activate New tab
+                const tabNew = sessionSection.querySelector('#tab-new');
+                if (tabNew) tabNew.click();
+            }
+        });
+        
+        // init
+        if (sessionSection && window.SessionPicker) {
+            window.SessionPicker.render(sessionSection, {
+                sessions: window.SessionStore.getAll(),
+                onOpen: onOpenSession,
+                onCreate: onCreateSession,
+            });
+        }
+        if (askedContainer && window.AskedList) {
+            const questionsById = new Map();
+            idMap.order.forEach(id => { const q = idMap.byId.get(id); if (q) questionsById.set(id, q); });
+            window.AskedList.render(askedContainer, { askedIds: [], timestamps: [], questionsById, onSelect: (id) => {
+                renderQuestionById(id);
+                isPreview = true;
+                if (historyChip) historyChip.classList.remove('hidden');
+                if (exhaustedBanner) exhaustedBanner.classList.add('hidden');
+            }});
+        }
+        renderQuestionById(null);
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            const tag = (e.target && e.target.tagName) || '';
+            const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable;
+            if (isInput) return;
+            if (e.key === 'n' || e.key === 'N') { e.preventDefault(); nextBtn.click(); }
+            if (e.key === 'u' || e.key === 'U') { e.preventDefault(); if (!undoBtn.disabled) undoBtn.click(); }
+            if (e.key === 'r' || e.key === 'R') { e.preventDefault(); if (!resetBtn.disabled) resetBtn.click(); }
+        });

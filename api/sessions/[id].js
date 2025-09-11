@@ -1,7 +1,7 @@
-const { getSession, saveSession } = require('../../sessionStore');
-const { parseBody } = require('../_utils');
+const { parseBody, readSessionFromCookies, writeSessionCookie, logRequest } = require('../_utils');
 
 module.exports = async (req, res) => {
+  logRequest(req);
   const { id } = req.query || {};
 
   if (!id) {
@@ -10,7 +10,7 @@ module.exports = async (req, res) => {
     return;
   }
 
-  const session = getSession(id);
+  let session = readSessionFromCookies(req, id);
   if (!session) {
     res.statusCode = 404;
     res.setHeader('Content-Type', 'application/json');
@@ -60,7 +60,7 @@ module.exports = async (req, res) => {
         res.end(JSON.stringify({ error: 'Invalid action' }));
         return;
     }
-    saveSession(session);
+    writeSessionCookie(res, session);
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify(session));
