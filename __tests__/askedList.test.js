@@ -36,6 +36,27 @@ describe('AskedList', () => {
     expect(items[1].textContent).toContain('Alpha');
   });
 
+  test('copy includes datetime; export adds datetime column', () => {
+    const now = Date.now();
+    AskedList.render(container, { askedIds: ['a'], timestamps: [now], questionsById: mapFromArray(questions) });
+    const text = AskedList.copyToClipboard(container);
+    expect(text).toMatch(/Alpha question/);
+    expect(text).toMatch(/\d{2}/);
+    // Spy Blob for export
+    const BlobOrig = global.Blob;
+    const spy = jest.fn((parts, opts) => new BlobOrig(parts, opts));
+    global.Blob = spy;
+    try {
+      AskedList.exportMenu(container);
+      expect(spy).toHaveBeenCalled();
+      const args = spy.mock.calls[1] || spy.mock.calls[0];
+      const content = (args && args[0] && args[0][0]) || '';
+      expect(String(content)).toMatch(/datetime/);
+    } finally {
+      global.Blob = BlobOrig;
+    }
+  });
+
   test('filter hides non matching', () => {
     AskedList.render(container, { askedIds: ['a', 'b', 'c'], timestamps: [1,2,3], questionsById: mapFromArray(questions) });
     const input = container.querySelector('input[aria-label="Search asked questions"]');
