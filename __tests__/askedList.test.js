@@ -1,0 +1,59 @@
+/** @jest-environment jsdom */
+
+describe('AskedList', () => {
+  let container;
+  let AskedList;
+
+  const questions = [
+    { id: 'a', text: 'Alpha question' },
+    { id: 'b', text: 'Beta question that is a bit longer than others' },
+    { id: 'c', text: 'Gamma' },
+  ];
+
+  beforeEach(() => {
+    jest.resetModules();
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    AskedList = require('../public/askedList');
+  });
+
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  function mapFromArray(arr) {
+    const m = new Map();
+    arr.forEach(q => m.set(q.id, q));
+    return m;
+  }
+
+  test('renders items matching askedIds (most recent first)', () => {
+    AskedList.render(container, { askedIds: ['a', 'c'], timestamps: [1,2], questionsById: mapFromArray(questions) });
+    const items = container.querySelectorAll('[role="listitem"]');
+    expect(items.length).toBe(2);
+    // timestamp 2 (c) should come first by default
+    expect(items[0].textContent).toContain('Gamma');
+    expect(items[1].textContent).toContain('Alpha');
+  });
+
+  test('filter hides non matching', () => {
+    AskedList.render(container, { askedIds: ['a', 'b', 'c'], timestamps: [1,2,3], questionsById: mapFromArray(questions) });
+    const input = container.querySelector('input[aria-label="Search asked questions"]');
+    input.value = 'beta';
+    input.dispatchEvent(new Event('input'));
+    const items = Array.from(container.querySelectorAll('[role="listitem"]'));
+    expect(items.length).toBe(1);
+    expect(items[0].textContent.toLowerCase()).toContain('beta');
+  });
+
+  test('clicking item calls onSelect with id', () => {
+    const onSelect = jest.fn();
+    AskedList.render(container, { askedIds: ['b'], timestamps: [1], questionsById: mapFromArray(questions), onSelect });
+    const item = container.querySelector('[role="listitem"]');
+    item.click();
+    expect(onSelect).toHaveBeenCalledWith('b');
+  });
+});
+
+
+
