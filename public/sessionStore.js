@@ -114,6 +114,14 @@
                 write(s);
         }
 
+        function remove(name) {
+                const trimmed = (name || '').trim();
+                if (!trimmed) return;
+                try { localStorage.removeItem(keyFor(trimmed)); } catch {}
+                const list = getIndex().filter(n => n !== trimmed);
+                setIndex(list);
+        }
+
         function setCurrent(name, id) {
                 const s = open(name);
                 s.currentId = id ? String(id) : null;
@@ -134,6 +142,7 @@
                 upsertIndex,
                 migrateIfNeeded,
                 setCurrent,
+                remove,
         };
 
         if (typeof module !== 'undefined') module.exports = SessionStore;
