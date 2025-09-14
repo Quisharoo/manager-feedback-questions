@@ -30,10 +30,10 @@
         function buildLayout(container) {
                 container.innerHTML = '';
                 const wrapper = document.createElement('div');
-                wrapper.className = 'flex flex-col h-[560px] rounded-xl bg-white shadow-sm overflow-hidden';
+                wrapper.className = 'flex flex-col h-[560px] rounded-xl bg-white overflow-hidden';
 
                 const header = document.createElement('div');
-                header.className = 'sticky top-0 z-10 bg-white px-3 pt-3 pb-2 border-b flex flex-wrap items-center gap-2';
+                header.className = 'sticky top-0 z-10 bg-gray-50 px-3 pt-3 pb-2 border-b flex flex-wrap items-center gap-2';
                 const title = document.createElement('h2');
                 title.className = 'text-sm font-semibold mr-auto';
                 title.textContent = 'Asked in this session';
@@ -87,7 +87,7 @@
                 list.className = 'flex-1 overflow-y-auto px-3 py-2';
 
                 const footer = document.createElement('div');
-                footer.className = 'sticky bottom-0 z-10 bg-white px-3 py-2 border-t flex items-center justify-between';
+                footer.className = 'sticky bottom-0 z-10 bg-gray-50 px-3 py-2 border-t flex items-center justify-between';
                 const prevBtn = document.createElement('button');
                 prevBtn.type = 'button';
                 prevBtn.className = 'px-2 py-1 text-xs border border-gray-300 rounded text-gray-700 disabled:opacity-50';
