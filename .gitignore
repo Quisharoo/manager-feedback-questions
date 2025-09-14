@@ -46,3 +46,6 @@ build/
 
 # Mac Finder tags
 ._*
+
+# Project-specific
+REFRACTOR-REPORT.md
