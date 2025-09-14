@@ -244,17 +244,35 @@
                         panelNew.setAttribute('role', 'tabpanel');
                         panelNew.setAttribute('aria-labelledby', 'tab-new');
                         panelNew.className = 'hidden';
-                        const newArea = renderCollapsedCreateArea(container, state);
-                        // Esc cancels create form if visible
-                        newArea.addEventListener('keydown', (e) => {
-                                if (e.key === 'Escape') {
-                                        const cancel = newArea.querySelector('button:contains("Cancel")');
-                                        // Fallback: trigger first button with text Cancel
-                                        const btn = Array.from(newArea.querySelectorAll('button')).find(b => b.textContent.trim() === 'Cancel');
-                                        if (btn) btn.click();
-                                }
+                        // Inline create form (no toggle button)
+                        const formRow = document.createElement('div');
+                        formRow.className = 'flex items-center gap-2';
+                        const input = document.createElement('input');
+                        input.type = 'text';
+                        input.placeholder = 'e.g., 1:1 with Alex';
+                        input.className = 'border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400';
+                        input.setAttribute('aria-label', 'New session name');
+                        const createBtn = document.createElement('button');
+                        createBtn.type = 'button';
+                        createBtn.className = 'btn-primary text-white font-semibold px-4 py-2 rounded disabled:opacity-50';
+                        createBtn.textContent = 'Create';
+                        createBtn.disabled = true;
+                        input.addEventListener('input', () => {
+                                const trimmed = (input.value || '').trim();
+                                createBtn.disabled = !trimmed || (window.SessionStore && window.SessionStore.exists(trimmed));
                         });
-                        panelNew.appendChild(newArea);
+                        function submitCreate() {
+                                const name = (input.value || '').trim();
+                                if (!name) return;
+                                state.onCreate && state.onCreate(name);
+                                input.value = '';
+                                createBtn.disabled = true;
+                        }
+                        createBtn.addEventListener('click', submitCreate);
+                        input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !createBtn.disabled) { e.preventDefault(); submitCreate(); } });
+                        formRow.appendChild(input);
+                        formRow.appendChild(createBtn);
+                        panelNew.appendChild(formRow);
 
                         const helper = document.createElement('div');
                         helper.className = 'text-xs text-gray-500 mt-2';
@@ -278,6 +296,14 @@
                         card.appendChild(panelNew);
                         card.appendChild(helper);
                         container.appendChild(card);
+
+                        // Default to New tab if no sessions exist; otherwise Existing
+                        if (state.sessions.length === 0) {
+                                activate('new');
+                                setTimeout(() => { try { input.focus(); } catch {} }, 0);
+                        } else {
+                                activate('existing');
+                        }
                 },
                 updateSessions(container, sessions) {
                         const state = ensure(container);
@@ -288,7 +314,7 @@
                                 select.innerHTML = '';
                                 const none = document.createElement('option');
                                 none.value = '';
-                                none.textContent = '— None —';
+                                none.textContent = '— Select session —';
                                 select.appendChild(none);
                                 state.sessions.forEach(name => {
                                         const opt = document.createElement('option');
@@ -297,6 +323,21 @@
                                         select.appendChild(opt);
                                 });
                                 if (state.sessions.includes(current)) select.value = current;
+                        }
+                        // If no sessions remain, switch UI to New tab
+                        if (state.sessions.length === 0) {
+                                const tabExisting = container.querySelector('#tab-existing');
+                                const tabNew = container.querySelector('#tab-new');
+                                const panelExisting = container.querySelector('[role="tabpanel"][aria-labelledby="tab-existing"]');
+                                const panelNew = container.querySelector('[role="tabpanel"][aria-labelledby="tab-new"]');
+                                if (tabExisting && tabNew && panelExisting && panelNew) {
+                                        tabExisting.setAttribute('aria-selected', 'false');
+                                        tabExisting.className = 'px-3 py-1.5 text-sm text-gray-600';
+                                        tabNew.setAttribute('aria-selected', 'true');
+                                        tabNew.className = 'px-3 py-1.5 text-sm bg-indigo-50 text-indigo-700';
+                                        panelExisting.classList.add('hidden');
+                                        panelNew.classList.remove('hidden');
+                                }
                         }
                 }
         };

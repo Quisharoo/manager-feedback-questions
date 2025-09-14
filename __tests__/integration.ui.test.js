@@ -21,10 +21,7 @@ describe('Integration: new session, Next x3, Undo x1, Reset', () => {
   });
 
   test('flow updates asked list correctly', () => {
-    // Create new session via picker UI
-    const newBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === 'New session');
-    expect(newBtn).toBeTruthy();
-    newBtn.click();
+    // Create new session via picker UI (New tab is default when none exist)
     const input = document.querySelector('input[aria-label="New session name"]');
     const createBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === 'Create');
     input.value = 'Flow';
@@ -58,9 +55,7 @@ describe('Integration: new session, Next x3, Undo x1, Reset', () => {
   });
 
   test('existing session restores current card; copy/export include datetime', () => {
-    // Create session via UI
-    const newBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === 'New session');
-    newBtn.click();
+    // Create session via UI (New tab default when none exist)
     const input = document.querySelector('input[aria-label="New session name"]');
     const createBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === 'Create');
     input.value = 'Restore';

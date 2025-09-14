@@ -49,3 +49,4 @@ build/
 
 # Project-specific
 REFRACTOR-REPORT.md
+data/sessions.json
