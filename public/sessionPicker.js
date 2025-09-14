@@ -161,8 +161,13 @@
                                         </div>`;
                                 overlay.appendChild(dialog);
                                 document.body.appendChild(overlay);
-                                // prevent background scroll
+                                // prevent background scroll without layout shift
                                 const prevOverflow = document.body.style.overflow;
+                                const prevPaddingRight = document.body.style.paddingRight;
+                                const scrollBarWidth = window.innerWidth - document.documentElement.clientWidth;
+                                if (scrollBarWidth > 0) {
+                                        document.body.style.paddingRight = String(scrollBarWidth) + 'px';
+                                }
                                 document.body.style.overflow = 'hidden';
 
                                 const cancelButton = dialog.querySelector('#delCancel');
@@ -176,6 +181,7 @@
                                 function closeDialog({ restore = true } = {}) {
                                         overlay.remove();
                                         document.body.style.overflow = prevOverflow;
+                                        document.body.style.paddingRight = prevPaddingRight;
                                         if (restore) {
                                                 if (deleteBtn && typeof deleteBtn.focus === 'function' && !deleteBtn.disabled) {
                                                         try { deleteBtn.focus(); } catch {}

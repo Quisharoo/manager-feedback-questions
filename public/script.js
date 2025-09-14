@@ -213,6 +213,11 @@
             overlay.appendChild(dialog);
             document.body.appendChild(overlay);
             const prevOverflow = document.body.style.overflow;
+            const prevPaddingRight = document.body.style.paddingRight;
+            const scrollBarWidth = window.innerWidth - document.documentElement.clientWidth;
+            if (scrollBarWidth > 0) {
+                document.body.style.paddingRight = String(scrollBarWidth) + 'px';
+            }
             document.body.style.overflow = 'hidden';
 
             const cancelBtn = dialog.querySelector('#resetCancel');
@@ -225,6 +230,7 @@
             function closeDialog() {
                 overlay.remove();
                 document.body.style.overflow = prevOverflow;
+                document.body.style.paddingRight = prevPaddingRight;
                 if (resetBtn && typeof resetBtn.focus === 'function') { try { resetBtn.focus(); } catch {} }
             }
             overlay.addEventListener('keydown', (e) => {
