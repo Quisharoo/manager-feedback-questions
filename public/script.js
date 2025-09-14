@@ -51,9 +51,10 @@
         let activeSession = null; // { name, askedIds, timestamps }
         let currentQuestionId = null;
         let isPreview = false;
+        let isAdvancing = false;
         let resetUndoTimer = null;
 
-        function renderQuestionById(id) {
+        function renderQuestionById(id, { persist } = { persist: false }) {
             const question = id ? idMap.byId.get(id) : null;
             if (!id || !question) {
                 questionContainer.innerHTML = `
@@ -85,6 +86,10 @@
                 document.querySelector('.question-card').classList.remove('transform', 'scale-105');
             }, 300);
             currentQuestionId = id;
+            if (persist && activeSession && !isPreview && window.SessionStore && typeof window.SessionStore.setCurrent === 'function') {
+                window.SessionStore.setCurrent(activeSession.name, id);
+                activeSession = window.SessionStore.open(activeSession.name);
+            }
         }
 
         function updateSessionInfo() {
@@ -105,10 +110,15 @@
             if (!name) return;
             activeSession = window.SessionStore.open(name);
             window.__activeSessionName = activeSession.name;
-            renderQuestionById(null);
+            if (activeSession.currentId) {
+                renderQuestionById(activeSession.currentId, { persist: false });
+            } else {
+                renderQuestionById(null, { persist: false });
+            }
             updateSessionInfo();
             if (askedContainer && window.AskedList) window.AskedList.update(askedContainer, { askedIds: activeSession.askedIds, timestamps: activeSession.timestamps });
             if (exhaustedBanner) exhaustedBanner.classList.add('hidden');
+            if (nextBtn && typeof nextBtn.focus === 'function') { try { nextBtn.focus(); } catch {} }
         }
 
         function onCreateSession(name) {
@@ -124,6 +134,7 @@
         }
 
         nextBtn.addEventListener('click', () => {
+            if (isAdvancing) return;
             if (!activeSession) {
                 const sel = sessionSelect && sessionSelect.value;
                 if (sel) {
@@ -133,6 +144,7 @@
                     return;
                 }
             }
+            isAdvancing = true;
             if (currentQuestionId && !isPreview) {
                 window.SessionStore.addAsked(activeSession.name, currentQuestionId);
                 activeSession = window.SessionStore.open(activeSession.name);
@@ -142,13 +154,15 @@
             if (!nextId) {
                 if (exhaustedBanner) exhaustedBanner.classList.remove('hidden');
                 updateSessionInfo();
+                isAdvancing = false;
                 return;
             }
-            renderQuestionById(nextId);
+            renderQuestionById(nextId, { persist: true });
             isPreview = false;
             if (historyChip) historyChip.classList.add('hidden');
             updateSessionInfo();
             if (askedContainer && window.AskedList) window.AskedList.update(askedContainer, { askedIds: activeSession.askedIds, timestamps: activeSession.timestamps });
+            isAdvancing = false;
         });
 
         undoBtn.addEventListener('click', () => {
@@ -159,7 +173,7 @@
             const last = window.SessionStore.removeLastAsked(activeSession.name);
             activeSession = window.SessionStore.open(activeSession.name);
             if (last) {
-                renderQuestionById(last);
+                renderQuestionById(last, { persist: true });
             }
             isPreview = false;
             if (historyChip) historyChip.classList.add('hidden');
@@ -240,13 +254,23 @@
             const questionsById = new Map();
             idMap.order.forEach(id => { const q = idMap.byId.get(id); if (q) questionsById.set(id, q); });
             window.AskedList.render(askedContainer, { askedIds: [], timestamps: [], questionsById, onSelect: (id) => {
-                renderQuestionById(id);
+                renderQuestionById(id, { persist: false });
                 isPreview = true;
-                if (historyChip) historyChip.classList.remove('hidden');
+                if (historyChip) {
+                    historyChip.classList.remove('hidden');
+                    historyChip.innerHTML = '<button type="button" id="returnLiveBtn" class="underline">Return to live</button>';
+                    const btn = document.getElementById('returnLiveBtn');
+                    if (btn) btn.addEventListener('click', () => {
+                        const cur = activeSession && activeSession.currentId ? activeSession.currentId : null;
+                        renderQuestionById(cur, { persist: false });
+                        isPreview = false;
+                        historyChip.classList.add('hidden');
+                    });
+                }
                 if (exhaustedBanner) exhaustedBanner.classList.add('hidden');
             }});
         }
-        renderQuestionById(null);
+        renderQuestionById(null, { persist: false });
 
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {

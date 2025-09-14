@@ -31,7 +31,7 @@
         function keyFor(name) { return `session:${name}`; }
 
         function migrateIfNeeded(session) {
-                if (!session || typeof session !== 'object') return { name: '', askedIds: [], timestamps: [], updatedAt: Date.now() };
+                if (!session || typeof session !== 'object') return { name: '', askedIds: [], timestamps: [], updatedAt: Date.now(), currentId: null, currentViewedAt: 0 };
                 const asked = new Set(Array.isArray(session.askedIds) ? session.askedIds : []);
                 if (Array.isArray(session.skippedIds)) {
                         for (const id of session.skippedIds) asked.add(id);
@@ -50,7 +50,9 @@
                         const base = session.updatedAt || Date.now();
                         timestamps = askedIds.map((_, i) => base - (askedIds.length - 1 - i) * 1000);
                 }
-                return { name: session.name || '', askedIds, timestamps, updatedAt: session.updatedAt || Date.now() };
+                const currentId = typeof session.currentId === 'string' || session.currentId === null ? session.currentId : null;
+                const currentViewedAt = typeof session.currentViewedAt === 'number' ? session.currentViewedAt : 0;
+                return { name: session.name || '', askedIds, timestamps, updatedAt: session.updatedAt || Date.now(), currentId, currentViewedAt };
         }
 
         function read(name) {
@@ -66,7 +68,7 @@
                 const trimmed = (name || '').trim();
                 if (!trimmed) throw new Error('Invalid name');
                 if (exists(trimmed)) throw new Error('Session already exists');
-                const session = { name: trimmed, askedIds: [], timestamps: [], updatedAt: Date.now() };
+                const session = { name: trimmed, askedIds: [], timestamps: [], updatedAt: Date.now(), currentId: null, currentViewedAt: 0 };
                 write(session);
                 upsertIndex(trimmed);
         }
@@ -106,8 +108,19 @@
                 const s = open(name);
                 s.askedIds = [];
                 s.timestamps = [];
+                s.currentId = null;
+                s.currentViewedAt = 0;
                 s.updatedAt = Date.now();
                 write(s);
+        }
+
+        function setCurrent(name, id) {
+                const s = open(name);
+                s.currentId = id ? String(id) : null;
+                s.currentViewedAt = s.currentId ? Date.now() : 0;
+                s.updatedAt = Date.now();
+                write(s);
+                return s;
         }
 
         const SessionStore = {
@@ -120,6 +133,7 @@
                 reset,
                 upsertIndex,
                 migrateIfNeeded,
+                setCurrent,
         };
 
         if (typeof module !== 'undefined') module.exports = SessionStore;

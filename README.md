@@ -79,6 +79,12 @@ The client calls the API using `fetch` with JSON bodies, and surfaces non-OK res
 
 ## Export formats
 
-- Copy list: Newline-separated questions
-- Export Markdown: `asked-<session>.md` with a numbered list and header `# Asked: <name> (<YYYY-MM-DD>)`
-- Export CSV: `asked-<session>.csv` columns: index, question, timestamp (ms)
+- Copy list: Newline-separated questions with appended datetime (en-IE, 24h)
+- Export Markdown: `asked-<session>.md` with a numbered list and header `# Asked: <name> (<YYYY-MM-DD>)`; each line includes `— <datetime>`
+- Export CSV: `asked-<session>.csv` columns: index, question, timestamp (ms), datetime
+
+## Session persistence and controls
+
+- The currently shown card is persisted per session as `currentId` and `currentViewedAt` in `localStorage` and restored on open.
+- Next: If there is a current card, pressing Next records it as asked, then shows a new card. On a fresh session, the first press shows the first card without counting it.
+- Undo: Moves the last asked item back to the main card; the restored card becomes the current card.

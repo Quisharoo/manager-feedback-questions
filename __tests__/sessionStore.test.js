@@ -29,6 +29,18 @@ describe('SessionStore', () => {
     expect(s.askedIds).toEqual([]);
   });
 
+  test('migrates and persists currentId/currentViewedAt; setCurrent updates', () => {
+    localStorage.setItem('session:C1', JSON.stringify({ name: 'C1', askedIds: [], timestamps: [] }));
+    let s = SessionStore.open('C1');
+    expect(s.currentId).toBeNull();
+    expect(typeof s.currentViewedAt).toBe('number');
+    s = SessionStore.setCurrent('C1', 'abc');
+    expect(s.currentId).toBe('abc');
+    const again = SessionStore.open('C1');
+    expect(again.currentId).toBe('abc');
+    expect(again.currentViewedAt).toBeGreaterThan(0);
+  });
+
   test('migration merges legacy asked/skipped arrays', () => {
     localStorage.setItem('session:Legacy', JSON.stringify({ name: 'Legacy', asked: [{ id: 'a' }], skipped: [{ id: 'b' }], askedIds: ['c'] }));
     const s = SessionStore.open('Legacy');
