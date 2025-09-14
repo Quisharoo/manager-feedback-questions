@@ -15,9 +15,15 @@
         }
         
         .question-card {
-            min-height: 200px;
+            /* Fix the card height so controls below don't shift */
+            height: 320px;
+            min-height: 320px;
+            display: flex;
+            flex-direction: column;
             transition: all 0.3s ease;
         }
+        /* Allow long questions to scroll within the fixed card */
+        #question-container { flex: 1; overflow-y: auto; }
         
         .btn-primary {
             background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
@@ -55,7 +61,7 @@
         
         <div class="mb-6" id="session-section"></div>
 
-        <div id="exhaustedBanner" class="hidden mb-3 text-sm text-indigo-800 bg-indigo-100 border border-indigo-200 rounded px-3 py-2 flex items-center justify-between">
+        <div id="exhaustedBanner" class="invisible mb-3 text-sm text-indigo-800 bg-indigo-100 border border-indigo-200 rounded px-3 py-2 flex items-center justify-between">
             <span>All questions covered</span>
             <div class="flex items-center gap-2">
                 <button id="exhaustResetBtn" class="btn-primary text-white px-3 py-1 rounded">Reset session</button>
@@ -74,11 +80,11 @@
                         <div class="text-indigo-400 text-6xl mb-4">
                             <i class="fas fa-question-circle"></i>
                         </div>
-                        <p class="text-gray-500 italic">Press the button below to get a feedback question</p>
+                        <p class="text-gray-500 italic">Start a session to get a question</p>
                     </div>
                 </div>
-                <div class="text-center flex justify-center gap-4 flex-wrap md:static md:pb-0 pb-20">
-                    <button id="nextBtn" class="btn-primary text-white font-bold py-4 px-8 rounded-full text-lg shadow-lg md:static md:transform-none fixed left-1/2 -translate-x-1/2 bottom-4">
+                <div class="text-center flex justify-center gap-4 flex-wrap md:pb-24 pb-20">
+                    <button id="nextBtn" class="btn-primary text-white font-bold py-4 px-8 rounded-full text-lg shadow-lg">
                         <i class="fas fa-random mr-2"></i> Next
                     </button>
                     <button id="undoBtn" class="btn-primary text-white font-bold py-4 px-8 rounded-full text-lg shadow-lg disabled:opacity-50" disabled>
