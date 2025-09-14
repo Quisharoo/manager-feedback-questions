@@ -46,7 +46,12 @@
         const resetBtn = document.getElementById('resetBtn');
         const sessionBadge = document.getElementById('sessionBadge');
         const historyChip = document.getElementById('historyChip');
+        const questionCard = document.querySelector('.question-card');
         let sessionPickerHost = null;
+
+        function getSessionSelect() {
+            return document.getElementById('sessionSelect');
+        }
 
         const idMap = window.SelectionUtils.buildIdMap(questions);
         let activeSession = null; // { name, askedIds, timestamps }
@@ -82,9 +87,9 @@
                     <i class="fas fa-quote-right"></i>
                 </div>
             `;
-            document.querySelector('.question-card').classList.add('transform', 'scale-105');
+            if (questionCard) questionCard.classList.add('transform', 'scale-105');
             setTimeout(() => {
-                document.querySelector('.question-card').classList.remove('transform', 'scale-105');
+                if (questionCard) questionCard.classList.remove('transform', 'scale-105');
             }, 300);
             currentQuestionId = id;
             if (persist && activeSession && !isPreview && window.SessionStore && typeof window.SessionStore.setCurrent === 'function') {
@@ -139,7 +144,8 @@
         nextBtn.addEventListener('click', () => {
             if (isAdvancing) return;
             if (!activeSession) {
-                const sel = sessionSelect && sessionSelect.value;
+                const selEl = getSessionSelect();
+                const sel = selEl && selEl.value;
                 if (sel) {
                     activeSession = window.SessionStore.open(sel);
                     updateSessionInfo();
@@ -170,7 +176,8 @@
 
         undoBtn.addEventListener('click', () => {
             if (!activeSession) {
-                const sel = sessionSelect && sessionSelect.value;
+                const selEl = getSessionSelect();
+                const sel = selEl && selEl.value;
                 if (sel) activeSession = window.SessionStore.open(sel); else return;
             }
             const last = window.SessionStore.removeLastAsked(activeSession.name);
@@ -269,7 +276,8 @@
 
         resetBtn.addEventListener('click', () => {
             if (!activeSession) {
-                const sel = sessionSelect && sessionSelect.value;
+                const selEl = getSessionSelect();
+                const sel = selEl && selEl.value;
                 if (sel) activeSession = window.SessionStore.open(sel); else return;
             }
             confirmReset();
@@ -302,8 +310,7 @@
                 if (nextBtn) nextBtn.classList.add('hidden');
                 if (undoBtn) undoBtn.classList.add('hidden');
                 if (resetBtn) resetBtn.classList.add('hidden');
-                const card = document.querySelector('.question-card');
-                if (card) card.classList.add('hidden');
+                if (questionCard) questionCard.classList.add('hidden');
             } catch {}
 
             if (document.getElementById('sessionGateOverlay')) return;
@@ -372,8 +379,7 @@
                 if (nextBtn) nextBtn.classList.remove('hidden');
                 if (undoBtn) undoBtn.classList.remove('hidden');
                 if (resetBtn) resetBtn.classList.remove('hidden');
-                const card = document.querySelector('.question-card');
-                if (card) card.classList.remove('hidden');
+                if (questionCard) questionCard.classList.remove('hidden');
             } catch {}
             const overlay = document.getElementById('sessionGateOverlay');
             if (overlay) {
