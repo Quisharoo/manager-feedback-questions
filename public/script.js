@@ -411,6 +411,8 @@
             const tag = (e.target && e.target.tagName) || '';
             const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable;
             if (isInput) return;
+            // Ignore when modifier keys are pressed (e.g., Cmd+R/Ctrl+R reload)
+            if (e.metaKey || e.ctrlKey || e.altKey) return;
             if (e.key === 'n' || e.key === 'N') { e.preventDefault(); nextBtn.click(); }
             if (e.key === 'u' || e.key === 'U') { e.preventDefault(); if (!undoBtn.disabled) undoBtn.click(); }
             if (e.key === 'r' || e.key === 'R') { e.preventDefault(); if (!resetBtn.disabled) resetBtn.click(); }
