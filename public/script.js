@@ -68,7 +68,7 @@
                     <div class="text-indigo-400 text-6xl mb-4">
                         <i class="fas fa-question-circle"></i>
                     </div>
-                    <p class="text-gray-500 italic">Press Next to get a feedback question</p>
+                    <p class="text-gray-500 italic">Start a session to get a question</p>
                 </div>`;
                 currentQuestionId = null;
                 isPreview = false;
@@ -118,12 +118,23 @@
             window.__activeSessionName = activeSession.name;
             if (activeSession.currentId) {
                 renderQuestionById(activeSession.currentId, { persist: false });
+                isPreview = false;
             } else {
-                renderQuestionById(null, { persist: false });
+                // Auto-show a preview question on new/empty sessions (not recorded yet)
+                const askedSet = new Set(activeSession.askedIds);
+                const nextId = window.SelectionUtils.nextQuestionId(idMap.order, askedSet);
+                if (nextId) {
+                    renderQuestionById(nextId, { persist: false });
+                    isPreview = true;
+                    if (historyChip) historyChip.classList.add('hidden');
+                } else {
+                    renderQuestionById(null, { persist: false });
+                    isPreview = false;
+                }
             }
             updateSessionInfo();
             if (askedContainer && window.AskedList) window.AskedList.update(askedContainer, { askedIds: activeSession.askedIds, timestamps: activeSession.timestamps });
-            if (exhaustedBanner) exhaustedBanner.classList.add('hidden');
+            if (exhaustedBanner) exhaustedBanner.classList.add('invisible');
             if (nextBtn && typeof nextBtn.focus === 'function') { try { nextBtn.focus(); } catch {} }
             // Unlock UI if gated by session selection modal
             unlockApp();
@@ -153,6 +164,18 @@
                     return;
                 }
             }
+            // If we're viewing a preview (e.g., initial auto-shown card),
+            // the first Next click should confirm it without advancing.
+            if (isPreview && currentQuestionId) {
+                if (window.SessionStore && typeof window.SessionStore.setCurrent === 'function') {
+                    window.SessionStore.setCurrent(activeSession.name, currentQuestionId);
+                    activeSession = window.SessionStore.open(activeSession.name);
+                }
+                isPreview = false;
+                updateSessionInfo();
+                if (historyChip) historyChip.classList.add('hidden');
+                return;
+            }
             isAdvancing = true;
             if (currentQuestionId && !isPreview) {
                 window.SessionStore.addAsked(activeSession.name, currentQuestionId);
@@ -161,7 +184,7 @@
             const askedSet = new Set(activeSession.askedIds);
             const nextId = window.SelectionUtils.nextQuestionId(idMap.order, askedSet);
             if (!nextId) {
-                if (exhaustedBanner) exhaustedBanner.classList.remove('hidden');
+                if (exhaustedBanner) exhaustedBanner.classList.remove('invisible');
                 updateSessionInfo();
                 isAdvancing = false;
                 return;
@@ -189,7 +212,7 @@
             if (historyChip) historyChip.classList.add('hidden');
             updateSessionInfo();
             if (askedContainer && window.AskedList) window.AskedList.update(askedContainer, { askedIds: activeSession.askedIds, timestamps: activeSession.timestamps });
-            if (exhaustedBanner) exhaustedBanner.classList.add('hidden');
+            if (exhaustedBanner) exhaustedBanner.classList.add('invisible');
         });
 
         function performReset() {
@@ -199,7 +222,7 @@
             renderQuestionById(null);
             updateSessionInfo();
             if (askedContainer && window.AskedList) window.AskedList.update(askedContainer, { askedIds: activeSession.askedIds, timestamps: activeSession.timestamps });
-            if (exhaustedBanner) exhaustedBanner.classList.add('hidden');
+            if (exhaustedBanner) exhaustedBanner.classList.add('invisible');
         }
 
         function confirmReset() {
@@ -306,7 +329,7 @@
         function lockApp() {
             try {
                 if (askedContainer) askedContainer.classList.add('hidden');
-                if (exhaustedBanner) exhaustedBanner.classList.add('hidden');
+                if (exhaustedBanner) exhaustedBanner.classList.add('invisible');
                 if (nextBtn) nextBtn.classList.add('hidden');
                 if (undoBtn) undoBtn.classList.add('hidden');
                 if (resetBtn) resetBtn.classList.add('hidden');
@@ -407,7 +430,7 @@
                         historyChip.classList.add('hidden');
                     });
                 }
-                if (exhaustedBanner) exhaustedBanner.classList.add('hidden');
+                if (exhaustedBanner) exhaustedBanner.classList.add('invisible');
             }});
         }
         renderQuestionById(null, { persist: false });
