@@ -46,6 +46,7 @@
         const resetBtn = document.getElementById('resetBtn');
         const sessionBadge = document.getElementById('sessionBadge');
         const historyChip = document.getElementById('historyChip');
+        let sessionPickerHost = null;
 
         const idMap = window.SelectionUtils.buildIdMap(questions);
         let activeSession = null; // { name, askedIds, timestamps }
@@ -119,6 +120,8 @@
             if (askedContainer && window.AskedList) window.AskedList.update(askedContainer, { askedIds: activeSession.askedIds, timestamps: activeSession.timestamps });
             if (exhaustedBanner) exhaustedBanner.classList.add('hidden');
             if (nextBtn && typeof nextBtn.focus === 'function') { try { nextBtn.focus(); } catch {} }
+            // Unlock UI if gated by session selection modal
+            unlockApp();
         }
 
         function onCreateSession(name) {
@@ -127,8 +130,8 @@
             if (!window.SessionStore.exists(trimmed)) {
                 try { window.SessionStore.create(trimmed); } catch {}
             }
-            if (sessionSection && window.SessionPicker) {
-                window.SessionPicker.updateSessions(sessionSection, window.SessionStore.getAll());
+            if (sessionPickerHost && window.SessionPicker) {
+                window.SessionPicker.updateSessions(sessionPickerHost, window.SessionStore.getAll());
             }
             onOpenSession(trimmed);
         }
@@ -274,21 +277,113 @@
 
         if (exhaustResetBtn) exhaustResetBtn.addEventListener('click', () => resetBtn.click());
         if (exhaustNewBtn) exhaustNewBtn.addEventListener('click', () => {
-            if (sessionSection && window.SessionPicker) {
-                // activate New tab
-                const tabNew = sessionSection.querySelector('#tab-new');
-                if (tabNew) tabNew.click();
-            }
+            // Show gate again to start a new session
+            lockApp();
+            const tabNew = document.querySelector('#sessionGateOverlay #tab-new');
+            if (tabNew) tabNew.click();
         });
-        
-        // init
-        if (sessionSection && window.SessionPicker) {
-            window.SessionPicker.render(sessionSection, {
-                sessions: window.SessionStore.getAll(),
-                onOpen: onOpenSession,
-                onCreate: onCreateSession,
-            });
+
+        // --- Session gate helpers ---
+        function renderSessionPickerInto(container) {
+            if (container && window.SessionPicker) {
+                sessionPickerHost = container;
+                window.SessionPicker.render(container, {
+                    sessions: window.SessionStore.getAll(),
+                    onOpen: onOpenSession,
+                    onCreate: onCreateSession,
+                });
+            }
         }
+
+        function lockApp() {
+            try {
+                if (askedContainer) askedContainer.classList.add('hidden');
+                if (exhaustedBanner) exhaustedBanner.classList.add('hidden');
+                if (nextBtn) nextBtn.classList.add('hidden');
+                if (undoBtn) undoBtn.classList.add('hidden');
+                if (resetBtn) resetBtn.classList.add('hidden');
+                const card = document.querySelector('.question-card');
+                if (card) card.classList.add('hidden');
+            } catch {}
+
+            if (document.getElementById('sessionGateOverlay')) return;
+            const overlay = document.createElement('div');
+            overlay.id = 'sessionGateOverlay';
+            overlay.className = 'fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50';
+            const dialog = document.createElement('div');
+            dialog.className = 'bg-white rounded-lg p-4 w-full max-w-2xl shadow-lg';
+            dialog.setAttribute('role', 'dialog');
+            dialog.setAttribute('aria-modal', 'true');
+            dialog.setAttribute('aria-labelledby', 'gateTitle');
+            dialog.tabIndex = -1;
+            dialog.innerHTML = `
+                <h2 id="gateTitle" class="text-lg font-semibold mb-2">Start a session</h2>
+                <p class="text-sm text-gray-600 mb-3">Pick an existing session or create a new one to begin.</p>
+                <div id="sessionGateHost"></div>
+            `;
+            overlay.appendChild(dialog);
+            document.body.appendChild(overlay);
+
+            const prevOverflow = document.body.style.overflow;
+            const prevPaddingRight = document.body.style.paddingRight;
+            const scrollBarWidth = window.innerWidth - document.documentElement.clientWidth;
+            if (scrollBarWidth > 0) {
+                document.body.style.paddingRight = String(scrollBarWidth) + 'px';
+            }
+            document.body.style.overflow = 'hidden';
+
+            const focusableSelectors = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+            function getFocusable() {
+                return Array.from(dialog.querySelectorAll(focusableSelectors)).filter(el => !el.disabled && el.offsetParent !== null);
+            }
+            overlay.addEventListener('keydown', (e) => {
+                if (e.key === 'Tab') {
+                    const focusables = getFocusable();
+                    if (focusables.length === 0) return;
+                    const first = focusables[0];
+                    const last = focusables[focusables.length - 1];
+                    if (e.shiftKey) {
+                        if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+                    } else {
+                        if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+                    }
+                }
+                if (e.key === 'Escape') { e.preventDefault(); }
+            });
+
+            const host = dialog.querySelector('#sessionGateHost');
+            renderSessionPickerInto(host);
+            setTimeout(() => {
+                try {
+                    const first = getFocusable()[0];
+                    if (first) first.focus();
+                } catch {}
+            }, 0);
+
+            overlay._restore = () => {
+                document.body.style.overflow = prevOverflow;
+                document.body.style.paddingRight = prevPaddingRight;
+            };
+        }
+
+        function unlockApp() {
+            try {
+                if (askedContainer) askedContainer.classList.remove('hidden');
+                if (nextBtn) nextBtn.classList.remove('hidden');
+                if (undoBtn) undoBtn.classList.remove('hidden');
+                if (resetBtn) resetBtn.classList.remove('hidden');
+                const card = document.querySelector('.question-card');
+                if (card) card.classList.remove('hidden');
+            } catch {}
+            const overlay = document.getElementById('sessionGateOverlay');
+            if (overlay) {
+                if (typeof overlay._restore === 'function') { try { overlay._restore(); } catch {} }
+                overlay.remove();
+            }
+        }
+        
+        // init: gate the app on load
+        lockApp();
         if (askedContainer && window.AskedList) {
             const questionsById = new Map();
             idMap.order.forEach(id => { const q = idMap.byId.get(id); if (q) questionsById.set(id, q); });
@@ -319,4 +414,18 @@
             if (e.key === 'n' || e.key === 'N') { e.preventDefault(); nextBtn.click(); }
             if (e.key === 'u' || e.key === 'U') { e.preventDefault(); if (!undoBtn.disabled) undoBtn.click(); }
             if (e.key === 'r' || e.key === 'R') { e.preventDefault(); if (!resetBtn.disabled) resetBtn.click(); }
+        });
+
+        // Relock if current session is deleted via SessionPicker
+        window.addEventListener('session-deleted', (ev) => {
+            try {
+                const deleted = ev && ev.detail && ev.detail.name;
+                if (deleted && typeof window.__activeSessionName === 'string' && deleted === window.__activeSessionName) {
+                    activeSession = null;
+                    window.__activeSessionName = undefined;
+                    renderQuestionById(null, { persist: false });
+                    updateSessionInfo();
+                    lockApp();
+                }
+            } catch {}
         });
