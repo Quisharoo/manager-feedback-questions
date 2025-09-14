@@ -195,22 +195,56 @@
         function confirmReset() {
             if (!activeSession) return;
             const name = activeSession.name;
-            const sheet = document.createElement('div');
-            sheet.className = 'fixed inset-0 bg-black/30 flex items-end justify-center p-4';
-            sheet.innerHTML = `
-                <div class="bg-white rounded-lg p-4 w-full max-w-sm">
-                    <div class="text-sm mb-3">Reset asked questions for <span class="font-semibold">${name}</span>?</div>
-                    <div class="flex justify-end gap-2">
-                        <button id="resetCancel" class="px-3 py-1 border border-gray-300 rounded">Cancel</button>
-                        <button id="resetConfirm" class="px-3 py-1 bg-indigo-600 text-white rounded">Reset</button>
-                    </div>
+            const overlay = document.createElement('div');
+            overlay.className = 'fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50';
+            const dialog = document.createElement('div');
+            dialog.className = 'bg-white rounded-lg p-4 w-full max-w-sm shadow-lg';
+            dialog.setAttribute('role', 'dialog');
+            dialog.setAttribute('aria-modal', 'true');
+            dialog.setAttribute('aria-labelledby', 'resetTitle');
+            dialog.tabIndex = -1;
+            dialog.innerHTML = `
+                <h2 id="resetTitle" class="text-sm font-semibold mb-2">Reset session</h2>
+                <div class="text-sm mb-3">Reset asked questions for <span class="font-semibold">${name}</span>?</div>
+                <div class="flex justify-end gap-2">
+                    <button id="resetCancel" class="px-3 py-1 border border-gray-300 rounded">Cancel</button>
+                    <button id="resetConfirm" class="btn-primary text-white px-3 py-1 rounded">Reset</button>
                 </div>`;
-            document.body.appendChild(sheet);
-            sheet.querySelector('#resetCancel').addEventListener('click', () => sheet.remove());
-            sheet.querySelector('#resetConfirm').addEventListener('click', () => {
-                sheet.remove();
+            overlay.appendChild(dialog);
+            document.body.appendChild(overlay);
+            const prevOverflow = document.body.style.overflow;
+            document.body.style.overflow = 'hidden';
+
+            const cancelBtn = dialog.querySelector('#resetCancel');
+            const confirmBtn = dialog.querySelector('#resetConfirm');
+            const focusableSelectors = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+            function getFocusable() {
+                return Array.from(dialog.querySelectorAll(focusableSelectors)).filter(el => !el.disabled && el.offsetParent !== null);
+            }
+            const prevFocus = document.activeElement;
+            function closeDialog() {
+                overlay.remove();
+                document.body.style.overflow = prevOverflow;
+                if (resetBtn && typeof resetBtn.focus === 'function') { try { resetBtn.focus(); } catch {} }
+            }
+            overlay.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') { e.preventDefault(); closeDialog(); }
+                if (e.key === 'Tab') {
+                    const focusables = getFocusable();
+                    if (focusables.length === 0) return;
+                    const first = focusables[0];
+                    const last = focusables[focusables.length - 1];
+                    if (e.shiftKey) {
+                        if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+                    } else {
+                        if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+                    }
+                }
+            });
+            cancelBtn.addEventListener('click', () => closeDialog());
+            confirmBtn.addEventListener('click', () => {
+                closeDialog();
                 performReset();
-                // 5s undo toast
                 const toast = document.createElement('div');
                 toast.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-sm px-3 py-1.5 rounded shadow flex items-center gap-3';
                 toast.innerHTML = `<span>Session reset</span><button class="px-2 py-0.5 bg-white text-gray-900 rounded" id="undoResetBtn">Undo</button>`;
@@ -218,11 +252,10 @@
                 clearTimeout(resetUndoTimer);
                 resetUndoTimer = setTimeout(() => { toast.remove(); }, 5000);
                 toast.querySelector('#undoResetBtn').addEventListener('click', () => {
-                    // nothing to restore beyond askedIds, which are already cleared; we can no-op or store snapshot
-                    // For simplicity, we won't restore previous askedIds in this minimal implementation.
                     toast.remove();
                 });
             });
+            setTimeout(() => { try { cancelBtn.focus(); } catch {} }, 0);
         }
 
         resetBtn.addEventListener('click', () => {

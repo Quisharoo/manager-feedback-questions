@@ -121,7 +121,14 @@
                         openBtn.className = 'btn-primary text-white font-semibold px-4 py-2 rounded disabled:opacity-50';
                         openBtn.textContent = 'Open session';
                         openBtn.disabled = true;
+                        const deleteBtn = document.createElement('button');
+                        deleteBtn.id = 'deleteSessionBtn';
+                        deleteBtn.type = 'button';
+                        deleteBtn.className = 'px-3 py-2 rounded border border-red-300 text-red-700 disabled:opacity-50';
+                        deleteBtn.textContent = 'Delete';
+                        deleteBtn.disabled = true;
                         select.addEventListener('change', () => { openBtn.disabled = !select.value; });
+                        select.addEventListener('change', () => { deleteBtn.disabled = !select.value; });
                         openBtn.addEventListener('click', () => { if (select.value) state.onOpen && state.onOpen(select.value); });
                         // Enter on select opens
                         select.addEventListener('keydown', (e) => {
@@ -129,7 +136,103 @@
                         });
                         selectRow.appendChild(select);
                         selectRow.appendChild(openBtn);
+                        selectRow.appendChild(deleteBtn);
                         panelExisting.appendChild(selectRow);
+
+                        // Accessible centered delete modal
+                        deleteBtn.addEventListener('click', () => {
+                                const name = select.value;
+                                if (!name) return;
+                                const previouslyFocused = document.activeElement;
+                                const overlay = document.createElement('div');
+                                overlay.className = 'fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50';
+                                const dialog = document.createElement('div');
+                                dialog.className = 'bg-white rounded-lg p-4 w-full max-w-sm shadow-lg';
+                                dialog.setAttribute('role', 'dialog');
+                                dialog.setAttribute('aria-modal', 'true');
+                                dialog.setAttribute('aria-labelledby', 'delTitle');
+                                dialog.tabIndex = -1;
+                                dialog.innerHTML = `
+                                        <h2 id=\"delTitle\" class=\"text-sm font-semibold mb-2\">Delete session</h2>
+                                        <div class=\"text-sm mb-3\">Delete session <span class=\"font-semibold\">${name}</span>? This cannot be undone.</div>
+                                        <div class=\"flex justify-end gap-2\">
+                                                <button id=\"delCancel\" class=\"px-3 py-1 border border-gray-300 rounded\">Cancel</button>
+                                                <button id=\"delConfirm\" class=\"btn-primary text-white px-3 py-1 rounded\">Delete</button>
+                                        </div>`;
+                                overlay.appendChild(dialog);
+                                document.body.appendChild(overlay);
+                                // prevent background scroll
+                                const prevOverflow = document.body.style.overflow;
+                                document.body.style.overflow = 'hidden';
+
+                                const cancelButton = dialog.querySelector('#delCancel');
+                                const confirmButton = dialog.querySelector('#delConfirm');
+
+                                // focus trap
+                                const focusableSelectors = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+                                function getFocusable() {
+                                        return Array.from(dialog.querySelectorAll(focusableSelectors)).filter(el => !el.disabled && el.offsetParent !== null);
+                                }
+                                function closeDialog({ restore = true } = {}) {
+                                        overlay.remove();
+                                        document.body.style.overflow = prevOverflow;
+                                        if (restore) {
+                                                if (deleteBtn && typeof deleteBtn.focus === 'function' && !deleteBtn.disabled) {
+                                                        try { deleteBtn.focus(); } catch {}
+                                                } else if (select && typeof select.focus === 'function') {
+                                                        try { select.focus(); } catch {}
+                                                } else if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
+                                                        try { previouslyFocused.focus(); } catch {}
+                                                }
+                                        }
+                                }
+                                function onKeydown(e) {
+                                        if (e.key === 'Escape') {
+                                                e.preventDefault();
+                                                closeDialog();
+                                        } else if (e.key === 'Tab') {
+                                                const focusables = getFocusable();
+                                                if (focusables.length === 0) return;
+                                                const first = focusables[0];
+                                                const last = focusables[focusables.length - 1];
+                                                if (e.shiftKey) {
+                                                        if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+                                                } else {
+                                                        if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+                                                }
+                                        }
+                                }
+                                overlay.addEventListener('keydown', onKeydown);
+
+                                cancelButton.addEventListener('click', () => closeDialog());
+                                confirmButton.addEventListener('click', () => {
+                                        closeDialog({ restore: false });
+                                        if (window.SessionStore && typeof window.SessionStore.remove === 'function') {
+                                                window.SessionStore.remove(name);
+                                                select.value = '';
+                                                openBtn.disabled = true;
+                                                deleteBtn.disabled = true;
+                                                SessionPicker.updateSessions(container, window.SessionStore.getAll());
+                                        }
+                                        if (typeof window.__activeSessionName === 'string' && window.__activeSessionName === name) {
+                                                const ev = new CustomEvent('session-deleted', { detail: { name } });
+                                                window.dispatchEvent(ev);
+                                        }
+                                        if (window.AskedList && typeof window.AskedList.toast === 'function') {
+                                                window.AskedList.toast(document.body, `Deleted session ${name}`);
+                                        } else {
+                                                const toast = document.createElement('div');
+                                                toast.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-sm px-3 py-1.5 rounded shadow';
+                                                toast.textContent = `Deleted session ${name}`;
+                                                document.body.appendChild(toast);
+                                                setTimeout(() => { toast.remove(); }, 2000);
+                                        }
+                                        if (select && typeof select.focus === 'function') { try { select.focus(); } catch {} }
+                                });
+
+                                // initial focus into dialog
+                                setTimeout(() => { try { cancelButton.focus(); } catch {} }, 0);
+                        });
 
                         const panelNew = document.createElement('div');
                         panelNew.setAttribute('role', 'tabpanel');
