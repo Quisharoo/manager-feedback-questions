@@ -29,6 +29,38 @@ Then open <http://localhost:3000> in your browser.
 
 Check out the configuration reference at <https://huggingface.co/docs/hub/spaces-config-reference>
 
+## Project structure
+
+```
+.
+├── server.js                 # Express app entry (serves static and API)
+├── server/
+│   └── sessionStore.js       # File-backed session storage used by Express API
+├── api/                      # Serverless-compatible API handlers (cookie-based session)
+│   ├── _utils.js
+│   └── sessions/
+│       ├── index.js          # POST /api/sessions
+│       └── [id].js           # GET/PATCH /api/sessions/:id
+├── public/                   # Client-side code and static assets
+│   ├── index.html
+│   ├── askedList.js
+│   ├── script.js
+│   ├── selectionUtils.js
+│   ├── sessionPicker.js
+│   └── sessionStore.js       # Browser localStorage session store
+├── data/
+│   └── sessions.json         # File used by server/sessionStore.js
+├── __tests__/                # Jest tests (server, serverless, and UI)
+├── .gitignore
+├── package.json
+└── README.md
+```
+
+Notes:
+- The Express server uses file-backed sessions in `data/sessions.json` via `server/sessionStore.js`.
+- The `api/` directory contains stateless, cookie-based handlers suitable for serverless platforms.
+- The browser `public/sessionStore.js` persists to `localStorage` and is unrelated to the server store.
+
 ## API
 
 ### POST `/api/sessions`

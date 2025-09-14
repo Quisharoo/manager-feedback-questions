@@ -80,7 +80,7 @@
 
                 const empty = document.createElement('div');
                 empty.className = 'text-sm text-gray-500 mt-2';
-                empty.textContent = 'No questions asked yet. Press Next to start.';
+                empty.textContent = 'No questions asked yet.';
 
                 const list = document.createElement('ul');
                 list.setAttribute('role', 'list');
@@ -171,24 +171,24 @@
                         if (state.selectedId === t.id) li.classList.add('ring-1', 'ring-indigo-300');
 
                         const row = document.createElement('div');
-                        row.className = 'flex items-center justify-between gap-2';
-                        const left = document.createElement('div');
-                        left.className = 'flex items-start gap-2';
+                        // Use CSS grid to lock in a clean column for index, content, and timestamp
+                        // which keeps wrapped lines perfectly aligned.
+                        row.className = 'grid grid-cols-[auto_1fr_auto] items-start gap-3 min-h-[44px]';
                         const idxBadge = document.createElement('span');
-                        idxBadge.className = 'text-xs text-gray-500 mt-0.5 w-6 text-right';
+                        idxBadge.className = 'text-xs text-gray-500 mt-0.5 w-6 text-right tabular-nums';
                         idxBadge.textContent = String(start + i + 1) + '.';
                         const textEl = document.createElement('div');
                         textEl.className = 'text-sm text-gray-700';
                         const truncated = text.length > 120 ? text.slice(0, 120) + '…' : text;
                         textEl.textContent = truncated;
-                        left.appendChild(idxBadge);
-                        left.appendChild(textEl);
+                        row.appendChild(idxBadge);
+                        row.appendChild(textEl);
 
                         const time = document.createElement('span');
-                        time.className = 'text-[10px] text-gray-400';
+                        // Keep timestamp on a single line and align to the end
+                        time.className = 'text-[10px] text-gray-400 whitespace-nowrap text-right';
                         time.textContent = fmtDateTime(t.ts);
 
-                        row.appendChild(left);
                         row.appendChild(time);
                         li.appendChild(row);
 
@@ -206,7 +206,7 @@
                         empty.style.display = 'block';
                         empty.textContent = 'No matches.';
                 } else {
-                        empty.textContent = 'No questions asked yet. Press Next to start.';
+                        empty.textContent = 'No questions asked yet.';
                 }
 
                 if (pageLabel) pageLabel.textContent = `Page ${state.page} of ${totalPages}`;
