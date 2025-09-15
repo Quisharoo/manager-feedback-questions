@@ -1,4 +1,5 @@
 const { parseBody, readSessionFromCookies, writeSessionCookie, logRequest } = require('../_utils');
+const { idFromAny, toQuestion } = require('../questions');
 
 module.exports = async (req, res) => {
   logRequest(req);
@@ -10,18 +11,39 @@ module.exports = async (req, res) => {
     return;
   }
 
-  let session = readSessionFromCookies(req, id);
-  if (!session) {
+  let sessionSlim = readSessionFromCookies(req, id);
+  if (!sessionSlim) {
     res.statusCode = 404;
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify({ error: 'Not found' }));
     return;
   }
 
+  // Normalize legacy shape { asked, skipped } -> ids arrays
+  if (!Array.isArray(sessionSlim.askedIds) && Array.isArray(sessionSlim.asked)) {
+    sessionSlim.askedIds = sessionSlim.asked.map(q => idFromAny(q)).filter(Boolean);
+    delete sessionSlim.asked;
+  }
+  if (!Array.isArray(sessionSlim.skippedIds) && Array.isArray(sessionSlim.skipped)) {
+    sessionSlim.skippedIds = sessionSlim.skipped.map(q => idFromAny(q)).filter(Boolean);
+    delete sessionSlim.skipped;
+  }
+  if (!Array.isArray(sessionSlim.askedIds)) sessionSlim.askedIds = [];
+  if (!Array.isArray(sessionSlim.skippedIds)) sessionSlim.skippedIds = [];
+
+  function expand(session) {
+    return {
+      id: session.id,
+      name: session.name,
+      asked: session.askedIds.map(toQuestion).filter(Boolean),
+      skipped: session.skippedIds.map(toQuestion).filter(Boolean),
+    };
+  }
+
   if (req.method === 'GET') {
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify(session));
+    res.end(JSON.stringify(expand(sessionSlim)));
     return;
   }
 
@@ -29,30 +51,31 @@ module.exports = async (req, res) => {
     const body = await parseBody(req);
     const action = body.action;
     const question = body.question;
+    const qid = idFromAny(question);
     switch (action) {
       case 'markAsked':
-        if (question && question.text) {
-          session.asked.push(question);
-          const idx = session.skipped.findIndex(q => q.text === question.text);
-          if (idx !== -1) session.skipped.splice(idx, 1);
+        if (qid) {
+          if (!sessionSlim.askedIds.includes(qid)) sessionSlim.askedIds.push(qid);
+          const idx = sessionSlim.skippedIds.indexOf(qid);
+          if (idx !== -1) sessionSlim.skippedIds.splice(idx, 1);
         }
         break;
       case 'markSkipped':
-        if (question && question.text) {
-          session.skipped.push(question);
-          const idx = session.asked.findIndex(q => q.text === question.text);
-          if (idx !== -1) session.asked.splice(idx, 1);
+        if (qid) {
+          if (!sessionSlim.skippedIds.includes(qid)) sessionSlim.skippedIds.push(qid);
+          const idx = sessionSlim.askedIds.indexOf(qid);
+          if (idx !== -1) sessionSlim.askedIds.splice(idx, 1);
         }
         break;
       case 'undoAsked':
-        session.asked.pop();
+        sessionSlim.askedIds.pop();
         break;
       case 'undoSkipped':
-        session.skipped.pop();
+        sessionSlim.skippedIds.pop();
         break;
       case 'reset':
-        session.asked = [];
-        session.skipped = [];
+        sessionSlim.askedIds = [];
+        sessionSlim.skippedIds = [];
         break;
       default:
         res.statusCode = 400;
@@ -60,10 +83,10 @@ module.exports = async (req, res) => {
         res.end(JSON.stringify({ error: 'Invalid action' }));
         return;
     }
-    writeSessionCookie(res, session);
+    writeSessionCookie(res, sessionSlim);
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify(session));
+    res.end(JSON.stringify(expand(sessionSlim)));
     return;
   }
 

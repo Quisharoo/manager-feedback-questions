@@ -49,10 +49,32 @@ function saveSession(session) {
   writeSessions(store);
 }
 
+// Simple per-session promise chain to serialize read-modify-write operations
+const updateLocks = new Map();
+function updateSession(id, updater) {
+  const last = updateLocks.get(id) || Promise.resolve();
+  const next = last.then(() => {
+    const store = readSessions();
+    const current = store.sessions[id] || null;
+    const updated = updater(current);
+    if (updated) {
+      store.sessions[id] = updated;
+      writeSessions(store);
+    }
+    return updated;
+  }).catch((e) => { throw e; });
+  // cleanup after completion
+  updateLocks.set(id, next.finally(() => {
+    if (updateLocks.get(id) === next) updateLocks.delete(id);
+  }));
+  return next;
+}
+
 module.exports = {
   createSession,
   getSession,
   saveSession,
+  updateSession,
 };
 
 

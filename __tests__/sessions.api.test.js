@@ -30,6 +30,8 @@ describe('sessions API', () => {
     expect(res.body).toHaveProperty('id');
     expect(typeof res.body.id).toBe('string');
     expect(res.body).toMatchObject({ name: 'Weekly 1:1 - Alice', asked: [], skipped: [] });
+    // Express server uses file-backed store; it does not set cookies
+    expect(res.headers['set-cookie']).toBeUndefined();
   });
 
   test('Read → returns saved state', async () => {
