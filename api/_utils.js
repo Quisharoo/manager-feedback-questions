@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 
+// Parse JSON body for serverless-style requests
 function parseBody(req) {
   return new Promise(resolve => {
     let data = '';
@@ -14,6 +15,7 @@ function parseBody(req) {
   });
 }
 
+// Minimal cookie parser (header → key/value map)
 function parseCookies(req) {
   const header = (req.headers && req.headers.cookie) || '';
   return header.split(';').reduce((acc, pair) => {
@@ -27,7 +29,8 @@ function parseCookies(req) {
   }, {});
 }
 
-// --- Cookie signing helpers ---
+// Cookie signing prevents client-side tampering of session payloads.
+// HMAC-SHA256 over the base64url JSON; format: <value>.<signature>
 const COOKIE_SECRET = process.env.COOKIE_SECRET || 'dev-secret';
 function sign(value) {
   const mac = crypto.createHmac('sha256', COOKIE_SECRET).update(value).digest('base64url');
@@ -47,18 +50,18 @@ function verify(signedValue) {
   }
 }
 
+// Encode a slim session payload (IDs only) into a signed cookie value
 function encodeSessionCookie(sessionSlim) {
   const json = JSON.stringify(sessionSlim);
   const raw = Buffer.from(json).toString('base64url');
   return sign(raw);
 }
 
+// Decode and verify a cookie; supports legacy unsigned payloads for compatibility
 function decodeSessionCookie(value) {
-  // First try to verify a signed payload
   const verified = verify(value);
   let raw = verified;
-  // Fallback: support legacy unsigned cookie for backward compatibility
-  if (!raw) raw = value;
+  if (!raw) raw = value; // fallback for old cookies
   try {
     const json = Buffer.from(raw, 'base64url').toString('utf8');
     return JSON.parse(json);
@@ -67,6 +70,7 @@ function decodeSessionCookie(value) {
   }
 }
 
+// Read a session cookie for a specific id
 function readSessionFromCookies(req, id) {
   const cookies = parseCookies(req);
   const key = `mfq_s_${id}`;
@@ -76,6 +80,7 @@ function readSessionFromCookies(req, id) {
   return session && session.id === id ? session : null;
 }
 
+// Write a session cookie with safe defaults; Secure is added in production
 function writeSessionCookie(res, sessionSlim) {
   const key = `mfq_s_${sessionSlim.id}`;
   const value = encodeURIComponent(encodeSessionCookie(sessionSlim));
@@ -99,6 +104,7 @@ function writeSessionCookie(res, sessionSlim) {
   }
 }
 
+// Minimal request log for diagnostics without leaking sensitive headers
 function logRequest(req, extra) {
   try {
     const headers = req.headers || {};

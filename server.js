@@ -25,8 +25,8 @@ app.get('/api/sessions/:id', (req, res) => {
   res.json(session);
 });
 
-// PATCH body: { action, question }
-// actions: markAsked, markSkipped, undoAsked, undoSkipped, reset
+// PATCH operations mutate a session's asked/skipped arrays.
+// We use updateSession to serialize concurrent writes for the same session id.
 app.patch('/api/sessions/:id', async (req, res) => {
   const id = req.params.id;
   const action = req.body && req.body.action;

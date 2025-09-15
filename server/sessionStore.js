@@ -5,6 +5,7 @@ const { randomUUID } = require('crypto');
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 
+// Ensure data directory and JSON store exist on disk
 function ensureDataFile() {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -49,7 +50,8 @@ function saveSession(session) {
   writeSessions(store);
 }
 
-// Simple per-session promise chain to serialize read-modify-write operations
+// Serialize updates per session to avoid lost updates across concurrent requests.
+// We chain a Promise per session id; each updater runs after the previous one completes.
 const updateLocks = new Map();
 function updateSession(id, updater) {
   const last = updateLocks.get(id) || Promise.resolve();
@@ -63,7 +65,7 @@ function updateSession(id, updater) {
     }
     return updated;
   }).catch((e) => { throw e; });
-  // cleanup after completion
+  // Cleanup when the chain settles
   updateLocks.set(id, next.finally(() => {
     if (updateLocks.get(id) === next) updateLocks.delete(id);
   }));

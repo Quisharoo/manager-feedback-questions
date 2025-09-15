@@ -9,114 +9,56 @@ tags:
   - deepsite
 ---
 
-This project now includes a simple Express server for local development.
+A lightweight tool to guide better 1:1s and track which questions you’ve already covered.
 
-## Setup
-
-Install dependencies:
+## Quick start
 
 ```bash
 npm install
-```
-
-Run the server:
-
-```bash
 npm start
+# open http://localhost:3000
 ```
 
-Then open <http://localhost:3000> in your browser.
+## How it works (user guide)
+- Start a session, give it a name (e.g., "Weekly 1:1 – Alex").
+- Next shows a question; Undo goes back; Reset clears progress for that session.
+- Export your asked list as Copy/Markdown/CSV if you want a portable record.
 
-Check out the configuration reference at <https://huggingface.co/docs/hub/spaces-config-reference>
+## Where your data lives
+- Production (Vercel): Your session progress is stored in a small, signed, HttpOnly cookie on your device. The cookie contains only question IDs (not full text) and lasts up to 1 year.
+- Local dev (Express server): Sessions are saved to `data/sessions.json` on disk.
 
-## Project structure
+Cross‑device sync is not automatic. To move data between devices or browsers, use the export features.
 
+## What can clear your data
+- Clearing site data/cookies in your browser
+- Private/incognito windows (deleted on close)
+- Switching devices/browsers (no shared cookie)
+- Local dev only: deleting `data/sessions.json`
+
+## Security
+- Cookies are HMAC‑signed (`COOKIE_SECRET`) to prevent tampering, `HttpOnly`, `SameSite=Lax`, and `Secure` in production.
+- Set `COOKIE_SECRET` in your deploy environment for proper signing. On Vercel: Project → Settings → Environment Variables → `COOKIE_SECRET`.
+
+## Minimal API
+- POST `/api/sessions` → create session → returns `{ id, name, asked: [], skipped: [] }`
+- GET `/api/sessions/:id` → returns session state
+- PATCH `/api/sessions/:id` with `{ action, question? }` where `action ∈ { markAsked, markSkipped, undoAsked, undoSkipped, reset }`
+
+## Project layout (essentials)
 ```
 .
-├── server.js                 # Express app entry (serves static and API)
-├── server/
-│   └── sessionStore.js       # File-backed session storage used by Express API
-├── api/                      # Serverless-compatible API handlers (cookie-based session)
-│   ├── _utils.js
+├── public/                 # UI (HTML/CSS/JS)
+├── api/                    # Serverless handlers (cookie‑backed, signed)
+│   ├── _utils.js           # parse, cookie sign/verify, logging
 │   └── sessions/
-│       ├── index.js          # POST /api/sessions
-│       └── [id].js           # GET/PATCH /api/sessions/:id
-├── public/                   # Client-side code and static assets
-│   ├── index.html
-│   ├── askedList.js
-│   ├── script.js
-│   ├── selectionUtils.js
-│   ├── sessionPicker.js
-│   └── sessionStore.js       # Browser localStorage session store
-├── data/
-│   └── sessions.json         # File used by server/sessionStore.js
-├── __tests__/                # Jest tests (server, serverless, and UI)
-├── .gitignore
-├── package.json
-└── README.md
+│       ├── index.js        # POST /api/sessions
+│       └── [id].js         # GET/PATCH /api/sessions/:id
+├── server.js               # Local Express server (serves static + file‑backed API)
+└── server/sessionStore.js  # File store with per‑session atomic updates
 ```
 
-Notes:
-- The Express server uses file-backed sessions in `data/sessions.json` via `server/sessionStore.js`.
-- The `api/` directory contains stateless, cookie-based handlers suitable for serverless platforms.
-- The browser `public/sessionStore.js` persists to `localStorage` and is unrelated to the server store.
-
-## API
-
-### POST `/api/sessions`
-
-Creates a new session.
-
-- Request: `Content-Type: application/json`
-  - Body: `{ "name": string }` (required, non-empty after trim)
-- Response: `201 Created`
-  - JSON: `{ id: string, name: string, asked: [], skipped: [] }`
-- Errors:
-  - `400 Bad Request` → `{ error: "Invalid name" }`
-  - `405 Method Not Allowed` for non-POST
-
-Storage: In serverless environments (e.g., Vercel), session state is stored in an `HttpOnly` cookie, keyed per-session (`mfq_s_<id>`). On create, the cookie is set with `SameSite=Lax` and a 1-year `Max-Age`. No in-memory state is required between requests.
-
-### GET `/api/sessions/:id`
-
-Reads session state.
-
-- Requires the corresponding `mfq_s_<id>` cookie to be present on the request.
-- Response: `200 OK` with the full session JSON; `404 Not Found` if missing/invalid.
-
-### PATCH `/api/sessions/:id`
-
-Updates session progress.
-
-- Request: `Content-Type: application/json`
-  - Body: `{ action: 'markAsked'|'markSkipped'|'undoAsked'|'undoSkipped'|'reset', question?: { theme: string, text: string } }`
-- Response: `200 OK` with updated session JSON; `400` on invalid action; `404` if no session cookie for that `id`.
-
-### Client usage
-
-The client calls the API using `fetch` with JSON bodies, and surfaces non-OK responses via `console.error` and a user-friendly alert for session creation.
-
-### Notes
-
-- Minimal structured logging is emitted from API handlers with method, URL, and select headers for diagnostics. Secrets are not logged.
-- In production, consider replacing Tailwind CDN with a static build and remove any unsupported `Permissions-Policy` directives.
-
-## Keyboard shortcuts
-
-- N: Next question
-- U: Undo last asked
-- R: Reset session (opens confirm sheet)
-- Enter (Existing tab): Open selected session
-- Esc (New tab): Cancel create form
-
-## Export formats
-
-- Copy list: Newline-separated questions with appended datetime (en-IE, 24h)
-- Export Markdown: `asked-<session>.md` with a numbered list and header `# Asked: <name> (<YYYY-MM-DD>)`; each line includes `— <datetime>`
-- Export CSV: `asked-<session>.csv` columns: index, question, timestamp (ms), datetime
-
-## Session persistence and controls
-
-- The currently shown card is persisted per session as `currentId` and `currentViewedAt` in `localStorage` and restored on open.
-- Next: If there is a current card, pressing Next records it as asked, then shows a new card. On a fresh session, the first press shows the first card without counting it.
-- Undo: Moves the last asked item back to the main card; the restored card becomes the current card.
+## Development notes
+- In production, the serverless API stores only IDs in cookies and expands them to full questions at read time.
+- The Express store serializes updates per session to avoid lost writes during concurrent requests.
+- Run tests with `npm test`.
