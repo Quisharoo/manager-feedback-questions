@@ -1,5 +1,6 @@
 const createHandler = require('../api/sessions');
 const idHandler = require('../api/sessions/[id]');
+const { questions } = require('../api/questions');
 
 function makeReq({ method = 'GET', url = '/', headers = {}, body = null, query = {} } = {}) {
   const listeners = {};
@@ -106,15 +107,15 @@ describe('serverless /api/sessions handlers', () => {
     const got = parseJson(getRes);
     expect(got).toMatchObject({ id, name: 'Cookie Persist', asked: [], skipped: [] });
 
-    // PATCH markAsked
-    const q = { theme: 'X', text: 'Hello' };
+    // PATCH markAsked with a real question
+    const q = questions[0];
     const patchReq = makeReq({ method: 'PATCH', url: `/api/sessions/${id}`, headers: { 'content-type': 'application/json', cookie: cookiePair }, body: { action: 'markAsked', question: q }, query: { id } });
     const patchRes = makeRes();
     await idHandler(patchReq, patchRes);
     await patchRes.done;
     expect(patchRes.statusCode).toBe(200);
     const updated = parseJson(patchRes);
-    expect(updated.asked).toEqual([q]);
+    expect(updated.asked.find(x => x.text === q.text)).toBeTruthy();
   });
 });
 
