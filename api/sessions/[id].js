@@ -11,6 +11,7 @@ module.exports = async (req, res) => {
     return;
   }
 
+  // Read slim session (IDs only) from cookie
   let sessionSlim = readSessionFromCookies(req, id);
   if (!sessionSlim) {
     res.statusCode = 404;
@@ -19,7 +20,7 @@ module.exports = async (req, res) => {
     return;
   }
 
-  // Normalize legacy shape { asked, skipped } -> ids arrays
+  // Backward-compat: normalize older cookie format with full objects
   if (!Array.isArray(sessionSlim.askedIds) && Array.isArray(sessionSlim.asked)) {
     sessionSlim.askedIds = sessionSlim.asked.map(q => idFromAny(q)).filter(Boolean);
     delete sessionSlim.asked;
@@ -31,6 +32,7 @@ module.exports = async (req, res) => {
   if (!Array.isArray(sessionSlim.askedIds)) sessionSlim.askedIds = [];
   if (!Array.isArray(sessionSlim.skippedIds)) sessionSlim.skippedIds = [];
 
+  // Expand IDs to full question objects for API responses
   function expand(session) {
     return {
       id: session.id,
@@ -52,6 +54,7 @@ module.exports = async (req, res) => {
     const action = body.action;
     const question = body.question;
     const qid = idFromAny(question);
+    // Apply update to slim session
     switch (action) {
       case 'markAsked':
         if (qid) {
@@ -83,6 +86,7 @@ module.exports = async (req, res) => {
         res.end(JSON.stringify({ error: 'Invalid action' }));
         return;
     }
+    // Persist back to cookie
     writeSessionCookie(res, sessionSlim);
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
