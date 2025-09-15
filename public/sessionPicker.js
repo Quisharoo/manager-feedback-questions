@@ -153,11 +153,11 @@
                                 dialog.setAttribute('aria-labelledby', 'delTitle');
                                 dialog.tabIndex = -1;
                                 dialog.innerHTML = `
-                                        <h2 id=\"delTitle\" class=\"text-sm font-semibold mb-2\">Delete session</h2>
-                                        <div class=\"text-sm mb-3\">Delete session <span class=\"font-semibold\">${name}</span>? This cannot be undone.</div>
-                                        <div class=\"flex justify-end gap-2\">
-                                                <button id=\"delCancel\" class=\"px-3 py-1 border border-gray-300 rounded\">Cancel</button>
-                                                <button id=\"delConfirm\" class=\"btn-primary text-white px-3 py-1 rounded\">Delete</button>
+                                        <h2 id="delTitle" class="text-sm font-semibold mb-2">Delete session</h2>
+                                        <div class="text-sm mb-3">Delete session <span class="font-semibold">${name}</span>? This cannot be undone.</div>
+                                        <div class="flex justify-end gap-2">
+                                                <button id="delCancel" class="px-3 py-1 border border-gray-300 rounded">Cancel</button>
+                                                <button id="delConfirm" class="btn-primary text-white px-3 py-1 rounded">Delete</button>
                                         </div>`;
                                 overlay.appendChild(dialog);
                                 document.body.appendChild(overlay);
@@ -276,7 +276,9 @@
 
                         const helper = document.createElement('div');
                         helper.className = 'text-xs text-gray-500 mt-2';
+                        helper.id = 'sessionPickerHelper';
                         helper.textContent = 'Pick an existing session or create a new one.';
+                        state.helperEl = helper;
 
                         // Tab interactions
                         function activate(which) {
@@ -300,9 +302,11 @@
                         // Default to New tab if no sessions exist; otherwise Existing
                         if (state.sessions.length === 0) {
                                 activate('new');
+                                helper.textContent = 'Create a new session to begin.';
                                 setTimeout(() => { try { input.focus(); } catch {} }, 0);
                         } else {
                                 activate('existing');
+                                helper.textContent = 'Pick an existing session or create a new one.';
                         }
                 },
                 updateSessions(container, sessions) {
@@ -324,8 +328,10 @@
                                 });
                                 if (state.sessions.includes(current)) select.value = current;
                         }
-                        // If no sessions remain, switch UI to New tab
+                        // Update helper and tabs depending on session count
+                        const helper = state.helperEl || container.querySelector('#sessionPickerHelper');
                         if (state.sessions.length === 0) {
+                                if (helper) helper.textContent = 'Create a new session to begin.';
                                 const tabExisting = container.querySelector('#tab-existing');
                                 const tabNew = container.querySelector('#tab-new');
                                 const panelExisting = container.querySelector('[role="tabpanel"][aria-labelledby="tab-existing"]');
@@ -338,6 +344,8 @@
                                         panelExisting.classList.add('hidden');
                                         panelNew.classList.remove('hidden');
                                 }
+                        } else {
+                                if (helper) helper.textContent = 'Pick an existing session or create a new one.';
                         }
                 }
         };
