@@ -19,7 +19,8 @@ module.exports = async (req, res) => {
     }
 
     const session = { id: randomUUID(), name, asked: [], skipped: [] };
-    writeSessionCookie(res, session);
+    const slim = { id: session.id, name: session.name, askedIds: [], skippedIds: [] };
+    writeSessionCookie(res, slim);
     res.statusCode = 201;
     res.setHeader('Content-Type', 'application/json');
     return res.end(JSON.stringify(session));

@@ -1,3 +1,5 @@
+const crypto = require('crypto');
+
 function parseBody(req) {
   return new Promise(resolve => {
     let data = '';
@@ -25,14 +27,40 @@ function parseCookies(req) {
   }, {});
 }
 
-function encodeSessionCookie(session) {
-  const json = JSON.stringify(session);
-  return Buffer.from(json).toString('base64url');
+// --- Cookie signing helpers ---
+const COOKIE_SECRET = process.env.COOKIE_SECRET || 'dev-secret';
+function sign(value) {
+  const mac = crypto.createHmac('sha256', COOKIE_SECRET).update(value).digest('base64url');
+  return `${value}.${mac}`;
+}
+function verify(signedValue) {
+  try {
+    const idx = signedValue.lastIndexOf('.');
+    if (idx === -1) return null;
+    const value = signedValue.slice(0, idx);
+    const mac = signedValue.slice(idx + 1);
+    const expected = crypto.createHmac('sha256', COOKIE_SECRET).update(value).digest('base64url');
+    const ok = crypto.timingSafeEqual(Buffer.from(mac), Buffer.from(expected));
+    return ok ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function encodeSessionCookie(sessionSlim) {
+  const json = JSON.stringify(sessionSlim);
+  const raw = Buffer.from(json).toString('base64url');
+  return sign(raw);
 }
 
 function decodeSessionCookie(value) {
+  // First try to verify a signed payload
+  const verified = verify(value);
+  let raw = verified;
+  // Fallback: support legacy unsigned cookie for backward compatibility
+  if (!raw) raw = value;
   try {
-    const json = Buffer.from(value, 'base64url').toString('utf8');
+    const json = Buffer.from(raw, 'base64url').toString('utf8');
     return JSON.parse(json);
   } catch {
     return null;
@@ -48,9 +76,20 @@ function readSessionFromCookies(req, id) {
   return session && session.id === id ? session : null;
 }
 
-function writeSessionCookie(res, session) {
-  const key = `mfq_s_${session.id}`;
-  const cookie = `${key}=${encodeURIComponent(encodeSessionCookie(session))}; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000`;
+function writeSessionCookie(res, sessionSlim) {
+  const key = `mfq_s_${sessionSlim.id}`;
+  const value = encodeURIComponent(encodeSessionCookie(sessionSlim));
+  const parts = [
+    `${key}=${value}`,
+    'Path=/api/sessions',
+    'HttpOnly',
+    'SameSite=Lax',
+    'Max-Age=31536000',
+  ];
+  if (process.env.NODE_ENV === 'production') {
+    parts.push('Secure');
+  }
+  const cookie = parts.join('; ');
   const existing = res.getHeader && res.getHeader('Set-Cookie');
   if (existing) {
     const arr = Array.isArray(existing) ? existing.concat(cookie) : [existing, cookie];
@@ -77,4 +116,4 @@ function logRequest(req, extra) {
   }
 }
 
-module.exports = { parseBody, parseCookies, readSessionFromCookies, writeSessionCookie, logRequest };
+module.exports = { parseBody, parseCookies, readSessionFromCookies, writeSessionCookie, logRequest, decodeSessionCookie };
