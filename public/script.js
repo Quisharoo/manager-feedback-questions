@@ -348,7 +348,7 @@
             dialog.tabIndex = -1;
             dialog.innerHTML = `
                 <h2 id="gateTitle" class="text-lg font-semibold mb-2">Start a session</h2>
-                <p class="text-sm text-gray-600 mb-3">Pick an existing session or create a new one to begin.</p>
+                <p id="gateHelper" class="text-sm text-gray-600 mb-3">Pick an existing session or create a new one to begin.</p>
                 <div id="sessionGateHost"></div>
             `;
             overlay.appendChild(dialog);
@@ -380,6 +380,17 @@
                 }
                 if (e.key === 'Escape') { e.preventDefault(); }
             });
+
+            // Dynamic helper text
+            try {
+                const gateHelper = dialog.querySelector('#gateHelper');
+                const sessions = window.SessionStore.getAll();
+                if (Array.isArray(sessions) && sessions.length === 0) {
+                    gateHelper.textContent = 'Create a new session to begin.';
+                } else {
+                    gateHelper.textContent = 'Pick an existing session or create a new one to begin.';
+                }
+            } catch {}
 
             const host = dialog.querySelector('#sessionGateHost');
             renderSessionPickerInto(host);
