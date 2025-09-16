@@ -33,11 +33,8 @@ describe('question generator UI', () => {
     select.value = 'Test';
     select.dispatchEvent(new Event('change'));
     document.getElementById('openSessionBtn').click();
-    // Next should show a question
-    nextBtn.click();
-    expect(container.textContent).not.toContain('Press Next');
-    // Undo should appear once asked count increments
-    nextBtn.click();
+    // First Next now immediately persists current and shows the next question on second click
+    nextBtn.click(); // persists first and moves to next
     expect(undoBtn.classList.contains('hidden')).toBe(false);
     undoBtn.click();
   });
@@ -50,8 +47,7 @@ describe('question generator UI', () => {
     select2.value = 'ResetTest';
     select2.dispatchEvent(new Event('change'));
     document.getElementById('openSessionBtn').click();
-    nextBtn.click(); // select question (not yet asked)
-    nextBtn.click(); // record as asked and pick next
+    nextBtn.click(); // persist first and move to next
     const s1 = SessionStore.open('ResetTest');
     expect(s1.askedIds.length).toBe(1);
     document.getElementById('resetBtn').click();
@@ -71,9 +67,7 @@ describe('question generator UI', () => {
     select3.dispatchEvent(new Event('change'));
     document.getElementById('openSessionBtn').click();
     // Ask and record a few
-    nextBtn.click(); // shows q1
-    nextBtn.click(); // records q1
-    nextBtn.click(); // shows q2
+    nextBtn.click(); // records q1 (first click now persists first question)
     nextBtn.click(); // records q2
     const s = SessionStore.open('NoRepeat');
     const SelectionUtils = require('../public/selectionUtils');

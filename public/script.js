@@ -82,8 +82,12 @@
                     <i class="fas fa-quote-left"></i>
                 </div>
                 <p class="text-sm uppercase tracking-wider ${themeClass} px-2 py-1 rounded-full inline-block mb-2">${question.theme}</p>
-                <p class="text-xl md:text-2xl text-gray-800 font-medium mb-4">${question.text}</p>
-                <div class="${themeClass.split(' ')[1]} text-4xl">
+                <p class="text-xl md:text-2xl text-gray-800 font-medium mb-3">${question.text}</p>
+                <div class="mt-4 text-left">
+                    <label for="answerText" class="block text-sm font-medium text-gray-700 mb-1">Your answer</label>
+                    <textarea id="answerText" class="w-full border border-gray-300 rounded-lg px-3 py-2 h-28 resize-y focus:outline-none focus:ring-2 focus:ring-indigo-400" placeholder="Type your notes here…"></textarea>
+                </div>
+                <div class="${themeClass.split(' ')[1]} text-4xl mt-4">
                     <i class="fas fa-quote-right"></i>
                 </div>
             `;
@@ -96,6 +100,25 @@
                 window.SessionStore.setCurrent(activeSession.name, id);
                 activeSession = window.SessionStore.open(activeSession.name);
             }
+
+            // Wire up answer editor
+            try {
+                const textarea = document.getElementById('answerText');
+                const initial = (activeSession && window.SessionStore && typeof window.SessionStore.getAnswer === 'function') ? window.SessionStore.getAnswer(activeSession.name, id) : '';
+                textarea.value = initial;
+                textarea.addEventListener('blur', () => {
+                    if (!activeSession) return;
+                    const val = textarea.value || '';
+                    if (window.SessionStore && typeof window.SessionStore.setAnswer === 'function') {
+                        window.SessionStore.setAnswer(activeSession.name, id, val);
+                        activeSession = window.SessionStore.open(activeSession.name);
+                        if (askedContainer && window.AskedList) {
+                            const answeredIds = Object.entries(activeSession.answers || {}).filter(([,v]) => typeof v === 'string' && v.trim() !== '').map(([k]) => String(k));
+                            window.AskedList.update(askedContainer, { askedIds: activeSession.askedIds, timestamps: activeSession.timestamps, answeredIds });
+                        }
+                    }
+                });
+            } catch {}
         }
 
         function updateSessionInfo() {
@@ -120,12 +143,12 @@
                 renderQuestionById(activeSession.currentId, { persist: false });
                 isPreview = false;
             } else {
-                // Auto-show a preview question on new/empty sessions (not recorded yet)
+                // Choose first question and immediately set it as current (no preview)
                 const askedSet = new Set(activeSession.askedIds);
                 const nextId = window.SelectionUtils.nextQuestionId(idMap.order, askedSet);
                 if (nextId) {
-                    renderQuestionById(nextId, { persist: false });
-                    isPreview = true;
+                    isPreview = false;
+                    renderQuestionById(nextId, { persist: true });
                     if (historyChip) historyChip.classList.add('hidden');
                 } else {
                     renderQuestionById(null, { persist: false });
@@ -133,7 +156,10 @@
                 }
             }
             updateSessionInfo();
-            if (askedContainer && window.AskedList) window.AskedList.update(askedContainer, { askedIds: activeSession.askedIds, timestamps: activeSession.timestamps });
+            if (askedContainer && window.AskedList) {
+                const answeredIds = Object.entries(activeSession.answers || {}).filter(([,v]) => typeof v === 'string' && v.trim() !== '').map(([k]) => String(k));
+                window.AskedList.update(askedContainer, { askedIds: activeSession.askedIds, timestamps: activeSession.timestamps, answeredIds });
+            }
             if (exhaustedBanner) exhaustedBanner.classList.add('invisible');
             if (nextBtn && typeof nextBtn.focus === 'function') { try { nextBtn.focus(); } catch {} }
             // Unlock UI if gated by session selection modal
@@ -152,7 +178,7 @@
             onOpenSession(trimmed);
         }
 
-        nextBtn.addEventListener('click', () => {
+        if (!nextBtn._boundClick) nextBtn.addEventListener('click', () => {
             if (isAdvancing) return;
             if (!activeSession) {
                 const selEl = getSessionSelect();
@@ -164,20 +190,16 @@
                     return;
                 }
             }
-            // If we're viewing a preview (e.g., initial auto-shown card),
-            // the first Next click should confirm it without advancing.
-            if (isPreview && currentQuestionId) {
-                if (window.SessionStore && typeof window.SessionStore.setCurrent === 'function') {
-                    window.SessionStore.setCurrent(activeSession.name, currentQuestionId);
-                    activeSession = window.SessionStore.open(activeSession.name);
-                }
-                isPreview = false;
-                updateSessionInfo();
-                if (historyChip) historyChip.classList.add('hidden');
-                return;
-            }
             isAdvancing = true;
-            if (currentQuestionId && !isPreview) {
+            // Save current answer implicitly
+            try {
+                const textarea = document.getElementById('answerText');
+                if (textarea && currentQuestionId && activeSession && window.SessionStore && typeof window.SessionStore.setAnswer === 'function') {
+                    window.SessionStore.setAnswer(activeSession.name, currentQuestionId, textarea.value || '');
+                }
+            } catch {}
+            // Record the currently shown question as asked, whether preview or not.
+            if (currentQuestionId) {
                 window.SessionStore.addAsked(activeSession.name, currentQuestionId);
                 activeSession = window.SessionStore.open(activeSession.name);
             }
@@ -193,11 +215,14 @@
             isPreview = false;
             if (historyChip) historyChip.classList.add('hidden');
             updateSessionInfo();
-            if (askedContainer && window.AskedList) window.AskedList.update(askedContainer, { askedIds: activeSession.askedIds, timestamps: activeSession.timestamps });
+            if (askedContainer && window.AskedList) {
+                const answeredIds = Object.entries(activeSession.answers || {}).filter(([,v]) => typeof v === 'string' && v.trim() !== '').map(([k]) => String(k));
+                window.AskedList.update(askedContainer, { askedIds: activeSession.askedIds, timestamps: activeSession.timestamps, answeredIds });
+            }
             isAdvancing = false;
-        });
+        }); nextBtn._boundClick = true;
 
-        undoBtn.addEventListener('click', () => {
+        if (!undoBtn._boundClick) undoBtn.addEventListener('click', () => {
             if (!activeSession) {
                 const selEl = getSessionSelect();
                 const sel = selEl && selEl.value;
@@ -211,9 +236,12 @@
             isPreview = false;
             if (historyChip) historyChip.classList.add('hidden');
             updateSessionInfo();
-            if (askedContainer && window.AskedList) window.AskedList.update(askedContainer, { askedIds: activeSession.askedIds, timestamps: activeSession.timestamps });
+            if (askedContainer && window.AskedList) {
+                const answeredIds = Object.entries(activeSession.answers || {}).filter(([,v]) => typeof v === 'string' && v.trim() !== '').map(([k]) => String(k));
+                window.AskedList.update(askedContainer, { askedIds: activeSession.askedIds, timestamps: activeSession.timestamps, answeredIds });
+            }
             if (exhaustedBanner) exhaustedBanner.classList.add('invisible');
-        });
+        }); undoBtn._boundClick = true;
 
         function performReset() {
             if (!activeSession) return;
@@ -238,7 +266,7 @@
             dialog.tabIndex = -1;
             dialog.innerHTML = `
                 <h2 id="resetTitle" class="text-sm font-semibold mb-2">Reset session</h2>
-                <div class="text-sm mb-3">Reset asked questions for <span class="font-semibold">${name}</span>?</div>
+                <div class="text-sm mb-3">Reset asked questions and any saved answers for <span class="font-semibold">${name}</span>?</div>
                 <div class="flex justify-end gap-2">
                     <button id="resetCancel" class="px-3 py-1 border border-gray-300 rounded">Cancel</button>
                     <button id="resetConfirm" class="btn-primary text-white px-3 py-1 rounded">Reset</button>
@@ -297,14 +325,14 @@
             setTimeout(() => { try { cancelBtn.focus(); } catch {} }, 0);
         }
 
-        resetBtn.addEventListener('click', () => {
+        if (!resetBtn._boundClick) resetBtn.addEventListener('click', () => {
             if (!activeSession) {
                 const selEl = getSessionSelect();
                 const sel = selEl && selEl.value;
                 if (sel) activeSession = window.SessionStore.open(sel); else return;
             }
             confirmReset();
-        });
+        }); resetBtn._boundClick = true;
 
         if (exhaustResetBtn) exhaustResetBtn.addEventListener('click', () => resetBtn.click());
         if (exhaustNewBtn) exhaustNewBtn.addEventListener('click', () => {
@@ -427,7 +455,7 @@
         if (askedContainer && window.AskedList) {
             const questionsById = new Map();
             idMap.order.forEach(id => { const q = idMap.byId.get(id); if (q) questionsById.set(id, q); });
-            window.AskedList.render(askedContainer, { askedIds: [], timestamps: [], questionsById, onSelect: (id) => {
+            window.AskedList.render(askedContainer, { askedIds: [], timestamps: [], questionsById, answeredIds: [], onSelect: (id) => {
                 renderQuestionById(id, { persist: false });
                 isPreview = true;
                 if (historyChip) {
