@@ -141,6 +141,74 @@ app.patch('/api/sessions/:id', async (req, res) => {
   res.json(updated);
 });
 
+// --- Capability Sessions (always key-gated; no ADMIN_KEY required) ---
+app.post('/api/capsessions', (req, res) => {
+  const name = (req.body && typeof req.body.name === 'string' && req.body.name.trim()) || null;
+  // Always generate an edit key for capability sessions
+  const editKey = genKey(192);
+  const editKeyHash = hashKey(editKey);
+  const extra = { editKeyHash, createdAt: Date.now(), lastAccess: Date.now(), cap: true };
+  const session = createSession(name || '', extra);
+  const base = `${req.protocol || 'http'}://${req.headers.host}`;
+  const links = { edit: `${base}/?id=${session.id}&key=${editKey}&cap=1` };
+  res.status(201).json({ ...session, links });
+});
+
+app.get('/api/capsessions/:id', (req, res) => {
+  const session = getSession(req.params.id);
+  if (!session) return res.status(404).json({ error: 'Not found' });
+  const k = extractKey(req);
+  if (!keyAllowsRead(session, k)) return res.status(403).json({ error: 'Forbidden' });
+  try { session.lastAccess = Date.now(); saveSession(session); } catch {}
+  res.json(session);
+});
+
+app.patch('/api/capsessions/:id', async (req, res) => {
+  const id = req.params.id;
+  const k = extractKey(req);
+  const session = getSession(id);
+  if (!session) return res.status(404).json({ error: 'Not found' });
+  if (!keyAllowsWrite(session, k)) return res.status(403).json({ error: 'Forbidden' });
+
+  const action = req.body && req.body.action;
+  const question = req.body && req.body.question;
+  const updated = await updateSession(id, (s) => {
+    if (!s) return null;
+    switch (action) {
+      case 'markAsked':
+        if (question && question.text) {
+          s.asked.push(question);
+          const idx = s.skipped.findIndex(q => q.text === question.text);
+          if (idx !== -1) s.skipped.splice(idx, 1);
+        }
+        break;
+      case 'markSkipped':
+        if (question && question.text) {
+          s.skipped.push(question);
+          const idx = s.asked.findIndex(q => q.text === question.text);
+          if (idx !== -1) s.asked.splice(idx, 1);
+        }
+        break;
+      case 'undoAsked':
+        s.asked.pop();
+        break;
+      case 'undoSkipped':
+        s.skipped.pop();
+        break;
+      case 'reset':
+        s.asked = [];
+        s.skipped = [];
+        break;
+      default:
+        break;
+    }
+    s.lastAccess = Date.now();
+    return s;
+  }).catch(() => null);
+  if (!updated) return res.status(404).json({ error: 'Not found' });
+  res.json(updated);
+});
+
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
