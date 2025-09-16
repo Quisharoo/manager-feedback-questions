@@ -60,6 +60,78 @@
         let isAdvancing = false;
         let resetUndoTimer = null;
 
+        // --- Server capability mode detection ---
+        function getUrlParams() {
+            try {
+                const u = new URL(window.location.href);
+                return { id: u.searchParams.get('id') || '', key: u.searchParams.get('key') || '' };
+            } catch { return { id: '', key: '' }; }
+        }
+        function persistKey(id, key) {
+            try { if (id && key) sessionStorage.setItem('mfq_key_' + id, key); } catch {}
+        }
+        function getStoredKey(id) {
+            try { return id ? (sessionStorage.getItem('mfq_key_' + id) || '') : ''; } catch { return ''; }
+        }
+        const params = getUrlParams();
+        const serverSessionId = params.id || '';
+        const serverSessionKey = (params.key || getStoredKey(serverSessionId) || '');
+        const isServerMode = !!(serverSessionId && serverSessionKey);
+        if (isServerMode && params.key) persistKey(serverSessionId, serverSessionKey);
+
+        async function apiGetSession(id, key) {
+            const res = await fetch(`/api/sessions/${encodeURIComponent(id)}?key=${encodeURIComponent(key)}`);
+            if (!res.ok) throw new Error('Failed to load session');
+            return res.json();
+        }
+        async function apiPatch(id, key, body) {
+            const res = await fetch(`/api/sessions/${encodeURIComponent(id)}?key=${encodeURIComponent(key)}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body || {})
+            });
+            if (!res.ok) throw new Error('Failed to update session');
+            return res.json();
+        }
+
+        function mapAskedToIds(askedArray) {
+            const texts = Array.isArray(askedArray) ? askedArray.map(q => (q && q.text) || '') : [];
+            const textToId = new Map();
+            idMap.order.forEach(id => {
+                const q = idMap.byId.get(id);
+                if (q && typeof q.text === 'string') textToId.set(q.text, id);
+            });
+            return texts.map(t => textToId.get(t)).filter(Boolean);
+        }
+
+        async function serverLoadAndOpen() {
+            try {
+                const data = await apiGetSession(serverSessionId, serverSessionKey);
+                const askedIds = mapAskedToIds(data.asked || []);
+                // Synthesize timestamps for display (approximate ordering)
+                const base = Date.now();
+                const timestamps = askedIds.map((_, i) => base - (askedIds.length - 1 - i) * 1000);
+                activeSession = { name: data.name || 'session', askedIds, timestamps };
+                window.__activeSessionName = activeSession.name;
+                // Choose next question or show current if any
+                const askedSet = new Set(activeSession.askedIds);
+                const nextId = window.SelectionUtils.nextQuestionId(idMap.order, askedSet);
+                if (nextId) {
+                    isPreview = false;
+                    renderQuestionById(nextId, { persist: false });
+                } else {
+                    renderQuestionById(null, { persist: false });
+                }
+                updateSessionInfo();
+                if (askedContainer && window.AskedList) {
+                    window.AskedList.update(askedContainer, { askedIds: activeSession.askedIds, timestamps: activeSession.timestamps, answeredIds: [] });
+                }
+                unlockApp();
+            } catch (e) {
+                console.error('Failed to load server session');
+            }
+        }
+
         function renderQuestionById(id, { persist } = { persist: false }) {
             const question = id ? idMap.byId.get(id) : null;
             if (!id || !question) {
@@ -137,7 +209,13 @@
 
         function onOpenSession(name) {
             if (!name) return;
-            activeSession = window.SessionStore.open(name);
+            if (isServerMode) {
+                // In server mode, ignore local SessionStore for opening
+                activeSession = activeSession && activeSession.name ? activeSession : { name, askedIds: [], timestamps: [] };
+                window.__activeSessionName = name;
+            } else {
+                activeSession = window.SessionStore.open(name);
+            }
             window.__activeSessionName = activeSession.name;
             if (activeSession.currentId) {
                 renderQuestionById(activeSession.currentId, { persist: false });
@@ -148,7 +226,7 @@
                 const nextId = window.SelectionUtils.nextQuestionId(idMap.order, askedSet);
                 if (nextId) {
                     isPreview = false;
-                    renderQuestionById(nextId, { persist: true });
+                    renderQuestionById(nextId, { persist: !isServerMode });
                     if (historyChip) historyChip.classList.add('hidden');
                 } else {
                     renderQuestionById(null, { persist: false });
@@ -157,7 +235,7 @@
             }
             updateSessionInfo();
             if (askedContainer && window.AskedList) {
-                const answeredIds = Object.entries(activeSession.answers || {}).filter(([,v]) => typeof v === 'string' && v.trim() !== '').map(([k]) => String(k));
+                const answeredIds = activeSession.answers ? Object.entries(activeSession.answers || {}).filter(([,v]) => typeof v === 'string' && v.trim() !== '').map(([k]) => String(k)) : [];
                 window.AskedList.update(askedContainer, { askedIds: activeSession.askedIds, timestamps: activeSession.timestamps, answeredIds });
             }
             if (exhaustedBanner) exhaustedBanner.classList.add('invisible');
@@ -178,13 +256,13 @@
             onOpenSession(trimmed);
         }
 
-        if (!nextBtn._boundClick) nextBtn.addEventListener('click', () => {
+        if (!nextBtn._boundClick) nextBtn.addEventListener('click', async () => {
             if (isAdvancing) return;
             if (!activeSession) {
                 const selEl = getSessionSelect();
                 const sel = selEl && selEl.value;
                 if (sel) {
-                    activeSession = window.SessionStore.open(sel);
+                    activeSession = isServerMode ? { name: sel, askedIds: [], timestamps: [] } : window.SessionStore.open(sel);
                     updateSessionInfo();
                 } else {
                     return;
@@ -193,15 +271,27 @@
             isAdvancing = true;
             // Save current answer implicitly
             try {
-                const textarea = document.getElementById('answerText');
-                if (textarea && currentQuestionId && activeSession && window.SessionStore && typeof window.SessionStore.setAnswer === 'function') {
-                    window.SessionStore.setAnswer(activeSession.name, currentQuestionId, textarea.value || '');
+                if (!isServerMode) {
+                    const textarea = document.getElementById('answerText');
+                    if (textarea && currentQuestionId && activeSession && window.SessionStore && typeof window.SessionStore.setAnswer === 'function') {
+                        window.SessionStore.setAnswer(activeSession.name, currentQuestionId, textarea.value || '');
+                    }
                 }
             } catch {}
             // Record the currently shown question as asked, whether preview or not.
             if (currentQuestionId) {
-                window.SessionStore.addAsked(activeSession.name, currentQuestionId);
-                activeSession = window.SessionStore.open(activeSession.name);
+                if (isServerMode) {
+                    const q = idMap.byId.get(currentQuestionId);
+                    try {
+                        await apiPatch(serverSessionId, serverSessionKey, { action: 'markAsked', question: { text: q && q.text } });
+                        const now = Date.now();
+                        activeSession.askedIds = (activeSession.askedIds || []).concat([currentQuestionId]);
+                        activeSession.timestamps = (activeSession.timestamps || []).concat([now]);
+                    } catch {}
+                } else {
+                    window.SessionStore.addAsked(activeSession.name, currentQuestionId);
+                    activeSession = window.SessionStore.open(activeSession.name);
+                }
             }
             const askedSet = new Set(activeSession.askedIds);
             const nextId = window.SelectionUtils.nextQuestionId(idMap.order, askedSet);
@@ -211,25 +301,34 @@
                 isAdvancing = false;
                 return;
             }
-            renderQuestionById(nextId, { persist: true });
+            renderQuestionById(nextId, { persist: !isServerMode });
             isPreview = false;
             if (historyChip) historyChip.classList.add('hidden');
             updateSessionInfo();
             if (askedContainer && window.AskedList) {
-                const answeredIds = Object.entries(activeSession.answers || {}).filter(([,v]) => typeof v === 'string' && v.trim() !== '').map(([k]) => String(k));
+                const answeredIds = (!isServerMode && activeSession.answers) ? Object.entries(activeSession.answers || {}).filter(([,v]) => typeof v === 'string' && v.trim() !== '').map(([k]) => String(k)) : [];
                 window.AskedList.update(askedContainer, { askedIds: activeSession.askedIds, timestamps: activeSession.timestamps, answeredIds });
             }
             isAdvancing = false;
         }); nextBtn._boundClick = true;
 
-        if (!undoBtn._boundClick) undoBtn.addEventListener('click', () => {
+        if (!undoBtn._boundClick) undoBtn.addEventListener('click', async () => {
             if (!activeSession) {
                 const selEl = getSessionSelect();
                 const sel = selEl && selEl.value;
-                if (sel) activeSession = window.SessionStore.open(sel); else return;
+                if (sel) activeSession = isServerMode ? { name: sel, askedIds: [], timestamps: [] } : window.SessionStore.open(sel); else return;
             }
-            const last = window.SessionStore.removeLastAsked(activeSession.name);
-            activeSession = window.SessionStore.open(activeSession.name);
+            let last = null;
+            if (isServerMode) {
+                try {
+                    await apiPatch(serverSessionId, serverSessionKey, { action: 'undoAsked' });
+                    last = activeSession.askedIds.pop();
+                    if (Array.isArray(activeSession.timestamps)) activeSession.timestamps.pop();
+                } catch {}
+            } else {
+                last = window.SessionStore.removeLastAsked(activeSession.name);
+                activeSession = window.SessionStore.open(activeSession.name);
+            }
             if (last) {
                 renderQuestionById(last, { persist: true });
             }
@@ -237,7 +336,7 @@
             if (historyChip) historyChip.classList.add('hidden');
             updateSessionInfo();
             if (askedContainer && window.AskedList) {
-                const answeredIds = Object.entries(activeSession.answers || {}).filter(([,v]) => typeof v === 'string' && v.trim() !== '').map(([k]) => String(k));
+                const answeredIds = (!isServerMode && activeSession.answers) ? Object.entries(activeSession.answers || {}).filter(([,v]) => typeof v === 'string' && v.trim() !== '').map(([k]) => String(k)) : [];
                 window.AskedList.update(askedContainer, { askedIds: activeSession.askedIds, timestamps: activeSession.timestamps, answeredIds });
             }
             if (exhaustedBanner) exhaustedBanner.classList.add('invisible');
@@ -245,8 +344,14 @@
 
         function performReset() {
             if (!activeSession) return;
-            window.SessionStore.reset(activeSession.name);
-            activeSession = window.SessionStore.open(activeSession.name);
+            if (isServerMode) {
+                apiPatch(serverSessionId, serverSessionKey, { action: 'reset' }).catch(() => {});
+                activeSession.askedIds = [];
+                activeSession.timestamps = [];
+            } else {
+                window.SessionStore.reset(activeSession.name);
+                activeSession = window.SessionStore.open(activeSession.name);
+            }
             renderQuestionById(null);
             updateSessionInfo();
             if (askedContainer && window.AskedList) window.AskedList.update(askedContainer, { askedIds: activeSession.askedIds, timestamps: activeSession.timestamps });
@@ -451,7 +556,12 @@
         }
         
         // init: gate the app on load
-        lockApp();
+        if (!isServerMode) {
+            lockApp();
+        } else {
+            // In server mode, load the remote session and unlock UI
+            serverLoadAndOpen();
+        }
         if (askedContainer && window.AskedList) {
             const questionsById = new Map();
             idMap.order.forEach(id => { const q = idMap.byId.get(id); if (q) questionsById.set(id, q); });
