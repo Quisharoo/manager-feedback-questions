@@ -1,5 +1,6 @@
 const express = require('express');
 const path = require('path');
+const crypto = require('crypto');
 const { createSession, getSession, saveSession, updateSession } = require('./server/sessionStore');
 
 const app = express();
@@ -12,16 +13,73 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// --- Capability key helpers ---
+const ADMIN_KEY = process.env.ADMIN_KEY || '';
+const HMAC_SECRET = process.env.COOKIE_SECRET || 'dev-secret';
+function genKey(bits = 192) { return crypto.randomBytes(bits / 8).toString('base64url'); }
+function hashKey(key) { return crypto.createHmac('sha256', HMAC_SECRET).update(String(key || '')) .digest('base64'); }
+function extractKey(req) {
+  const q = req.query && req.query.key;
+  const auth = req.headers && req.headers.authorization;
+  const m = auth && auth.match(/^Key\s+(.+)$/i);
+  return q || (m && m[1]) || '';
+}
+function isAdmin(req) {
+  if (!ADMIN_KEY) return false;
+  const k = extractKey(req);
+  try {
+    const a = Buffer.from(hashKey(k));
+    const b = Buffer.from(hashKey(ADMIN_KEY));
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  } catch { return false; }
+}
+function keyAllowsRead(session, key) {
+  // If no keys on session, open access (legacy behavior)
+  if (!session || (!session.editKeyHash)) return true;
+  if (!key) return false;
+  try {
+    const a = Buffer.from(hashKey(key));
+    const b = Buffer.from(String(session.editKeyHash || ''));
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  } catch { return false; }
+}
+function keyAllowsWrite(session, key) {
+  return keyAllowsRead(session, key);
+}
+
 // --- API ---
 app.post('/api/sessions', (req, res) => {
+  // If ADMIN_KEY is configured, require it for creation
+  if (ADMIN_KEY && !isAdmin(req)) return res.status(403).json({ error: 'Forbidden' });
   const name = (req.body && typeof req.body.name === 'string' && req.body.name.trim()) || null;
-  const session = createSession(name || '');
-  res.status(201).json(session);
+  // Generate per-session edit key if ADMIN_KEY is enabled
+  let editKey, editKeyHash;
+  if (ADMIN_KEY) {
+    editKey = genKey(192);
+    editKeyHash = hashKey(editKey);
+  }
+  const extra = editKeyHash ? { editKeyHash, createdAt: Date.now(), lastAccess: Date.now() } : {};
+  const session = createSession(name || '', extra);
+  const base = `${req.protocol || 'http'}://${req.headers.host}`;
+  const links = editKey ? { edit: `${base}/?id=${session.id}&key=${editKey}` } : undefined;
+  res.status(201).json(links ? { ...session, links } : session);
 });
 
 app.get('/api/sessions/:id', (req, res) => {
   const session = getSession(req.params.id);
   if (!session) return res.status(404).json({ error: 'Not found' });
+  if (ADMIN_KEY) {
+    const admin = isAdmin(req);
+    const k = extractKey(req);
+    if (!admin && !keyAllowsRead(session, k)) return res.status(403).json({ error: 'Forbidden' });
+  }
+  // update lastAccess best-effort
+  if (session && session.id && typeof session.lastAccess !== 'undefined') {
+    try {
+      session.lastAccess = Date.now();
+      saveSession(session);
+    } catch {}
+  }
   res.json(session);
 });
 
@@ -31,7 +89,16 @@ app.patch('/api/sessions/:id', async (req, res) => {
   const id = req.params.id;
   const action = req.body && req.body.action;
   const question = req.body && req.body.question; // { theme, text }
-
+  let allow = true;
+  let isAdminReq = false;
+  if (ADMIN_KEY) {
+    isAdminReq = isAdmin(req);
+    const session = getSession(id);
+    if (!session) return res.status(404).json({ error: 'Not found' });
+    const k = extractKey(req);
+    allow = isAdminReq || keyAllowsWrite(session, k);
+    if (!allow) return res.status(403).json({ error: 'Forbidden' });
+  }
   const updated = await updateSession(id, (session) => {
     if (!session) return null;
     switch (action) {
@@ -64,6 +131,7 @@ app.patch('/api/sessions/:id', async (req, res) => {
         // invalid action, return session unchanged
         break;
     }
+    if (typeof session.lastAccess !== 'undefined') session.lastAccess = Date.now();
     return session;
   }).catch((e) => null);
 

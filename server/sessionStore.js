@@ -30,9 +30,9 @@ function writeSessions(store) {
   fs.writeFileSync(SESSIONS_FILE, JSON.stringify(store, null, 2));
 }
 
-function createSession(name) {
+function createSession(name, extra = {}) {
   const id = randomUUID();
-  const session = { id, name, asked: [], skipped: [] };
+  const session = { id, name, asked: [], skipped: [], ...extra };
   const store = readSessions();
   store.sessions[id] = session;
   writeSessions(store);
