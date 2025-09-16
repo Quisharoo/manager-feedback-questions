@@ -1,9 +1,21 @@
 (function() {
         function ensure(container) {
                 if (!container._sessionPicker) {
-                        container._sessionPicker = { sessions: [], onOpen: function() {}, onCreate: function() {} };
+                        container._sessionPicker = { sessions: [], onOpen: function() {}, onCreate: function() {}, helperEl: null };
                 }
                 return container._sessionPicker;
+        }
+
+        function filterSessions(list) {
+                const out = [];
+                const seen = new Set();
+                (Array.isArray(list) ? list : []).forEach(n => {
+                        const trimmed = typeof n === 'string' ? n.trim() : '';
+                        if (!trimmed || seen.has(trimmed)) return;
+                        seen.add(trimmed);
+                        out.push(trimmed);
+                });
+                return out;
         }
 
         function renderCollapsedCreateArea(container, state) {
@@ -69,7 +81,7 @@
         const SessionPicker = {
                 render(container, { sessions = [], onOpen, onCreate } = {}) {
                         const state = ensure(container);
-                        state.sessions = Array.isArray(sessions) ? sessions.slice() : [];
+                        state.sessions = filterSessions(sessions);
                         state.onOpen = typeof onOpen === 'function' ? onOpen : function() {};
                         state.onCreate = typeof onCreate === 'function' ? onCreate : function() {};
 
@@ -84,13 +96,13 @@
                         const tabExisting = document.createElement('button');
                         tabExisting.setAttribute('role', 'tab');
                         tabExisting.id = 'tab-existing';
-                        tabExisting.className = 'px-3 py-1.5 text-sm bg-indigo-50 text-indigo-700';
+                        tabExisting.className = 'px-3 py-1.5 text-sm bg-indigo-50 text-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400';
                         tabExisting.setAttribute('aria-selected', 'true');
                         tabExisting.textContent = 'Existing';
                         const tabNew = document.createElement('button');
                         tabNew.setAttribute('role', 'tab');
                         tabNew.id = 'tab-new';
-                        tabNew.className = 'px-3 py-1.5 text-sm text-gray-600';
+                        tabNew.className = 'px-3 py-1.5 text-sm text-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400';
                         tabNew.setAttribute('aria-selected', 'false');
                         tabNew.textContent = 'New';
                         tablist.appendChild(tabExisting);
@@ -153,11 +165,11 @@
                                 dialog.setAttribute('aria-labelledby', 'delTitle');
                                 dialog.tabIndex = -1;
                                 dialog.innerHTML = `
-                                        <h2 id="delTitle" class="text-sm font-semibold mb-2">Delete session</h2>
-                                        <div class="text-sm mb-3">Delete session <span class="font-semibold">${name}</span>? This cannot be undone.</div>
-                                        <div class="flex justify-end gap-2">
-                                                <button id="delCancel" class="px-3 py-1 border border-gray-300 rounded">Cancel</button>
-                                                <button id="delConfirm" class="btn-primary text-white px-3 py-1 rounded">Delete</button>
+                                        <h2 id=\"delTitle\" class=\"text-sm font-semibold mb-2\">Delete session</h2>
+                                        <div class=\"text-sm mb-3\">Delete session <span class=\"font-semibold\">${name}</span>? This cannot be undone.</div>
+                                        <div class=\"flex justify-end gap-2\">
+                                                <button id=\"delCancel\" class=\"px-3 py-1 border border-gray-300 rounded\">Cancel</button>
+                                                <button id=\"delConfirm\" class=\"btn-primary text-white px-3 py-1 rounded\">Delete</button>
                                         </div>`;
                                 overlay.appendChild(dialog);
                                 document.body.appendChild(overlay);
@@ -284,9 +296,18 @@
                         function activate(which) {
                                 const isExisting = which === 'existing';
                                 tabExisting.setAttribute('aria-selected', String(isExisting));
-                                tabExisting.className = isExisting ? 'px-3 py-1.5 text-sm bg-indigo-50 text-indigo-700' : 'px-3 py-1.5 text-sm text-gray-600';
                                 tabNew.setAttribute('aria-selected', String(!isExisting));
-                                tabNew.className = !isExisting ? 'px-3 py-1.5 text-sm bg-indigo-50 text-indigo-700' : 'px-3 py-1.5 text-sm text-gray-600';
+                                // Preserve existing classes (e.g., 'hidden'); only toggle active styles
+                                function setTabStyles(btn, active) {
+                                        btn.classList.remove('text-gray-600', 'bg-indigo-50', 'text-indigo-700');
+                                        if (active) {
+                                                btn.classList.add('bg-indigo-50', 'text-indigo-700');
+                                        } else {
+                                                btn.classList.add('text-gray-600');
+                                        }
+                                }
+                                setTabStyles(tabExisting, isExisting);
+                                setTabStyles(tabNew, !isExisting);
                                 panelExisting.classList[isExisting ? 'remove' : 'add']('hidden');
                                 panelNew.classList[!isExisting ? 'remove' : 'add']('hidden');
                         }
@@ -301,17 +322,22 @@
 
                         // Default to New tab if no sessions exist; otherwise Existing
                         if (state.sessions.length === 0) {
+                                // hide Existing tab and panel fully
+                                tabExisting.classList.add('hidden');
+                                panelExisting.classList.add('hidden');
                                 activate('new');
                                 helper.textContent = 'Create a new session to begin.';
                                 setTimeout(() => { try { input.focus(); } catch {} }, 0);
                         } else {
+                                // show Existing tab
+                                tabExisting.classList.remove('hidden');
                                 activate('existing');
                                 helper.textContent = 'Pick an existing session or create a new one.';
                         }
                 },
                 updateSessions(container, sessions) {
                         const state = ensure(container);
-                        state.sessions = Array.isArray(sessions) ? sessions.slice() : [];
+                        state.sessions = filterSessions(sessions);
                         const select = container.querySelector('#sessionSelect');
                         if (select) {
                                 const current = select.value;
@@ -328,24 +354,24 @@
                                 });
                                 if (state.sessions.includes(current)) select.value = current;
                         }
-                        // Update helper and tabs depending on session count
+                        // Update helper, tabs, and panel visibility depending on session count
                         const helper = state.helperEl || container.querySelector('#sessionPickerHelper');
+                        const tabExisting = container.querySelector('#tab-existing');
+                        const tabNew = container.querySelector('#tab-new');
+                        const panelExisting = container.querySelector('[role="tabpanel"][aria-labelledby="tab-existing"]');
+                        const panelNew = container.querySelector('[role="tabpanel"][aria-labelledby="tab-new"]');
                         if (state.sessions.length === 0) {
                                 if (helper) helper.textContent = 'Create a new session to begin.';
-                                const tabExisting = container.querySelector('#tab-existing');
-                                const tabNew = container.querySelector('#tab-new');
-                                const panelExisting = container.querySelector('[role="tabpanel"][aria-labelledby="tab-existing"]');
-                                const panelNew = container.querySelector('[role="tabpanel"][aria-labelledby="tab-new"]');
-                                if (tabExisting && tabNew && panelExisting && panelNew) {
-                                        tabExisting.setAttribute('aria-selected', 'false');
-                                        tabExisting.className = 'px-3 py-1.5 text-sm text-gray-600';
+                                if (tabExisting) tabExisting.classList.add('hidden');
+                                if (panelExisting) panelExisting.classList.add('hidden');
+                                if (tabNew) {
                                         tabNew.setAttribute('aria-selected', 'true');
                                         tabNew.className = 'px-3 py-1.5 text-sm bg-indigo-50 text-indigo-700';
-                                        panelExisting.classList.add('hidden');
-                                        panelNew.classList.remove('hidden');
                                 }
+                                if (panelNew) panelNew.classList.remove('hidden');
                         } else {
                                 if (helper) helper.textContent = 'Pick an existing session or create a new one.';
+                                if (tabExisting) tabExisting.classList.remove('hidden');
                         }
                 }
         };

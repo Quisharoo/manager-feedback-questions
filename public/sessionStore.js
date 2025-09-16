@@ -4,14 +4,31 @@
         }
 
         const INDEX_KEY = 'sessions:index';
+        function sanitize(list) {
+                const seen = new Set();
+                const out = [];
+                (Array.isArray(list) ? list : []).forEach(name => {
+                        const trimmed = typeof name === 'string' ? name.trim() : '';
+                        if (!trimmed) return;
+                        if (seen.has(trimmed)) return;
+                        seen.add(trimmed);
+                        out.push(trimmed);
+                });
+                return out;
+        }
         function getIndex() {
                 const raw = localStorage.getItem(INDEX_KEY);
                 const arr = safeParse(raw, []);
-                return Array.isArray(arr) ? arr : [];
+                const clean = sanitize(arr);
+                // Self-heal stored index if it changed
+                if (JSON.stringify(arr) !== JSON.stringify(clean)) {
+                        try { localStorage.setItem(INDEX_KEY, JSON.stringify(clean)); } catch {}
+                }
+                return clean;
         }
 
         function setIndex(list) {
-                try { localStorage.setItem(INDEX_KEY, JSON.stringify(list)); } catch {}
+                try { localStorage.setItem(INDEX_KEY, JSON.stringify(sanitize(list))); } catch {}
         }
 
         function upsertIndex(name) {
