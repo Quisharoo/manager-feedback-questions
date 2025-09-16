@@ -16,15 +16,18 @@
         }
         
         .question-card {
-            /* Fix the card height so controls below don't shift */
-            height: 320px;
+            /* Allow the card to grow so controls push down on larger screens */
             min-height: 320px;
             display: flex;
             flex-direction: column;
             transition: all 0.3s ease;
         }
-        /* Allow long questions to scroll within the fixed card */
+        /* Allow long content to scroll on small screens; show fully on desktop */
         #question-container { flex: 1; overflow-y: auto; }
+        @media (min-width: 768px) {
+            .question-card { min-height: 480px; }
+            #question-container { overflow-y: visible; }
+        }
         
         .btn-primary {
             background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);

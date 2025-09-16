@@ -10,6 +10,7 @@
                                 selectedId: null,
                                 page: 1,
                                 pageSize: 12,
+                                answeredSet: new Set(),
                         };
                 }
                 return container._askedListInstance;
@@ -178,9 +179,17 @@
                         idxBadge.className = 'text-xs text-gray-500 mt-0.5 w-6 text-right tabular-nums';
                         idxBadge.textContent = String(start + i + 1) + '.';
                         const textEl = document.createElement('div');
-                        textEl.className = 'text-sm text-gray-700';
+                        textEl.className = 'text-sm text-gray-700 flex items-center';
                         const truncated = text.length > 120 ? text.slice(0, 120) + '…' : text;
                         textEl.textContent = truncated;
+                        const answered = state.answeredSet && state.answeredSet.has(t.id);
+                        if (answered) {
+                                const icon = document.createElement('i');
+                                icon.className = 'fas fa-check-circle text-green-600 text-xs ml-2';
+                                icon.setAttribute('title', 'Has answer');
+                                icon.setAttribute('aria-label', 'Has answer');
+                                textEl.appendChild(icon);
+                        }
                         row.appendChild(idxBadge);
                         row.appendChild(textEl);
 
@@ -191,6 +200,7 @@
 
                         row.appendChild(time);
                         li.appendChild(row);
+                        li.setAttribute('data-answered', (state.answeredSet && state.answeredSet.has(t.id)) ? 'true' : 'false');
 
                         const handler = () => {
                                 state.selectedId = t.id;
@@ -216,13 +226,14 @@
         }
 
         const AskedList = {
-                render(container, { askedIds = [], timestamps = [], questionsById, onSelect } = {}) {
+                render(container, { askedIds = [], timestamps = [], questionsById, onSelect, answeredIds = [] } = {}) {
                         const state = ensureInstance(container);
                         state.askedIds = Array.isArray(askedIds) ? askedIds.slice() : [];
                         state.timestamps = Array.isArray(timestamps) ? timestamps.slice() : [];
                         state.questionsById = questionsById instanceof Map ? questionsById : new Map(Object.entries(questionsById || {}).map(([k, v]) => [k, v]));
                         state.onSelect = typeof onSelect === 'function' ? onSelect : function() {};
                         state.selectedId = null;
+                        state.answeredSet = new Set(Array.isArray(answeredIds) ? answeredIds.map(String) : []);
 
                         const { search, sortBtn, pageSize, copyBtn, exportBtn, prevBtn, nextBtn } = buildLayout(container);
 
@@ -257,10 +268,11 @@
 
                         renderList(container, state);
                 },
-                update(container, { askedIds, timestamps }) {
+                update(container, { askedIds, timestamps, answeredIds }) {
                         const state = ensureInstance(container);
                         if (Array.isArray(askedIds)) state.askedIds = askedIds.slice();
                         if (Array.isArray(timestamps)) state.timestamps = timestamps.slice();
+                        if (Array.isArray(answeredIds)) state.answeredSet = new Set(answeredIds.map(String));
                         renderList(container, state);
                 },
                 copyToClipboard(container) {
