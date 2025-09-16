@@ -294,12 +294,27 @@
                                 return q ? `${i+1}. ${q.text} — ${dt}` : '';
                         }).filter(Boolean);
                         const md = [`# Asked: ${name} (${date})`, ''].concat(mdLines).join('\n');
-                        const csvLines = ['index,question,timestamp,datetime'].concat(state.askedIds.map((id, i) => {
+                        // Pull answers from SessionStore (if available) to include in CSV export
+                        let answersById = {};
+                        try {
+                                if (window && window.SessionStore && typeof window.SessionStore.exists === 'function' && typeof window.SessionStore.open === 'function') {
+                                        if (window.SessionStore.exists(name)) {
+                                                const sess = window.SessionStore.open(name);
+                                                answersById = (sess && typeof sess.answers === 'object') ? sess.answers : {};
+                                        }
+                                }
+                        } catch {}
+                        const csvLines = ['session,index,question,answer,timestamp,datetime'].concat(state.askedIds.map((id, i) => {
                                 const q = state.questionsById.get(id);
                                 const t = state.timestamps[i] || 0;
+                                const safeName = String(name || '').replaceAll('"','""');
                                 const safe = q ? (q.text||'').replaceAll('"','""') : '';
+                                const rawAnswer = typeof answersById[String(id)] === 'string' ? answersById[String(id)] : '';
+                                const safeAnswer = rawAnswer.replaceAll('\r\n','\n').replaceAll('\r','\n').replaceAll('"','""');
                                 const dt = fmtDateTime(t).replaceAll('"','""');
-                                return `${i+1},"${safe}",${t},"${dt}"`;
+                                // Make the raw timestamp Excel-safe (prevent scientific notation)
+                                const excelTs = `="${String(t)}"`;
+                                return `"${safeName}",${i+1},"${safe}","${safeAnswer}",${excelTs},"${dt}"`;
                         })).join('\n');
                         function download(filename, text, type) {
                                 const blob = new Blob([text], { type });
@@ -316,9 +331,37 @@
                                         }
                                 } catch {}
                         }
-                        download(`asked-${name}.md`, md, 'text/markdown');
-                        download(`asked-${name}.csv`, csvLines, 'text/csv');
-                        AskedList.toast(container, `Exported asked-${name}.md`);
+                        // Simple export chooser dialog
+                        const overlay = document.createElement('div');
+                        overlay.className = 'fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50';
+                        const dialog = document.createElement('div');
+                        dialog.className = 'bg-white rounded-lg p-4 w-full max-w-sm shadow-lg';
+                        dialog.setAttribute('role', 'dialog');
+                        dialog.setAttribute('aria-modal', 'true');
+                        dialog.setAttribute('aria-labelledby', 'exportTitle');
+                        dialog.innerHTML = `
+                                <h2 id="exportTitle" class="text-sm font-semibold mb-2">Export asked list</h2>
+                                <div class="text-sm text-gray-700 mb-3">Choose a format to download for <span class="font-semibold">${name}</span>.</div>
+                                <div class="flex justify-end gap-2">
+                                        <button id="exportCancel" class="px-3 py-1 border border-gray-300 rounded">Cancel</button>
+                                        <button id="exportMd" class="px-3 py-1 border border-gray-300 rounded">Markdown</button>
+                                        <button id="exportCsv" class="btn-primary text-white px-3 py-1 rounded">CSV</button>
+                                </div>`;
+                        overlay.appendChild(dialog);
+                        document.body.appendChild(overlay);
+                        function close() { overlay.remove(); }
+                        overlay.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } });
+                        dialog.querySelector('#exportCancel').addEventListener('click', () => close());
+                        dialog.querySelector('#exportCsv').addEventListener('click', () => {
+                                download(`asked-${name}.csv`, csvLines, 'text/csv');
+                                close();
+                                AskedList.toast(container, `Exported asked-${name}.csv`);
+                        });
+                        dialog.querySelector('#exportMd').addEventListener('click', () => {
+                                download(`asked-${name}.md`, md, 'text/markdown');
+                                close();
+                                AskedList.toast(container, `Exported asked-${name}.md`);
+                        });
                 },
                 toast(container, message) {
                         const toast = document.createElement('div');
