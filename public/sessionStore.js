@@ -48,7 +48,7 @@
         function keyFor(name) { return `session:${name}`; }
 
         function migrateIfNeeded(session) {
-                if (!session || typeof session !== 'object') return { name: '', askedIds: [], timestamps: [], updatedAt: Date.now(), currentId: null, currentViewedAt: 0 };
+                if (!session || typeof session !== 'object') return { name: '', askedIds: [], timestamps: [], updatedAt: Date.now(), currentId: null, currentViewedAt: 0, answers: {} };
                 const asked = new Set(Array.isArray(session.askedIds) ? session.askedIds : []);
                 if (Array.isArray(session.skippedIds)) {
                         for (const id of session.skippedIds) asked.add(id);
@@ -69,7 +69,8 @@
                 }
                 const currentId = typeof session.currentId === 'string' || session.currentId === null ? session.currentId : null;
                 const currentViewedAt = typeof session.currentViewedAt === 'number' ? session.currentViewedAt : 0;
-                return { name: session.name || '', askedIds, timestamps, updatedAt: session.updatedAt || Date.now(), currentId, currentViewedAt };
+                const answers = (session.answers && typeof session.answers === 'object') ? session.answers : {};
+                return { name: session.name || '', askedIds, timestamps, updatedAt: session.updatedAt || Date.now(), currentId, currentViewedAt, answers };
         }
 
         function read(name) {
@@ -85,7 +86,7 @@
                 const trimmed = (name || '').trim();
                 if (!trimmed) throw new Error('Invalid name');
                 if (exists(trimmed)) throw new Error('Session already exists');
-                const session = { name: trimmed, askedIds: [], timestamps: [], updatedAt: Date.now(), currentId: null, currentViewedAt: 0 };
+                const session = { name: trimmed, askedIds: [], timestamps: [], updatedAt: Date.now(), currentId: null, currentViewedAt: 0, answers: {} };
                 write(session);
                 upsertIndex(trimmed);
         }
@@ -93,7 +94,7 @@
         function open(name) {
                 const trimmed = (name || '').trim();
                 if (!trimmed) throw new Error('Invalid name');
-                const session = read(trimmed) || { name: trimmed, askedIds: [], timestamps: [], updatedAt: Date.now() };
+                const session = read(trimmed) || { name: trimmed, askedIds: [], timestamps: [], updatedAt: Date.now(), currentId: null, currentViewedAt: 0, answers: {} };
                 // Ensure index is updated
                 upsertIndex(trimmed);
                 write(session);
@@ -127,6 +128,7 @@
                 s.timestamps = [];
                 s.currentId = null;
                 s.currentViewedAt = 0;
+                s.answers = {};
                 s.updatedAt = Date.now();
                 write(s);
         }
@@ -148,6 +150,34 @@
                 return s;
         }
 
+        function setAnswer(name, id, value) {
+                const s = open(name);
+                if (!s.answers || typeof s.answers !== 'object') s.answers = {};
+                const key = id ? String(id) : '';
+                if (!key) return s;
+                s.answers[key] = String(value || '');
+                s.updatedAt = Date.now();
+                write(s);
+                return s;
+        }
+
+        function getAnswer(name, id) {
+                const s = open(name);
+                const key = id ? String(id) : '';
+                if (!key) return '';
+                const val = s.answers && typeof s.answers === 'object' ? s.answers[key] : '';
+                return typeof val === 'string' ? val : '';
+        }
+
+        function hasAnswers(name) {
+                const s = open(name);
+                const obj = s.answers && typeof s.answers === 'object' ? s.answers : {};
+                for (const k in obj) {
+                        if (Object.prototype.hasOwnProperty.call(obj, k) && typeof obj[k] === 'string' && obj[k].trim() !== '') return true;
+                }
+                return false;
+        }
+
         const SessionStore = {
                 getAll: getIndex,
                 exists,
@@ -160,6 +190,9 @@
                 migrateIfNeeded,
                 setCurrent,
                 remove,
+                setAnswer,
+                getAnswer,
+                hasAnswers,
         };
 
         if (typeof module !== 'undefined') module.exports = SessionStore;

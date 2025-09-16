@@ -34,8 +34,7 @@ describe('Integration: new session, Next x3, Undo x1, Reset', () => {
     const resetBtn = document.getElementById('resetBtn');
     const askedContainer = document.getElementById('asked-container');
 
-    // Next x3 (first Next only shows question, second records, third shows next)
-    nextBtn.click();
+    // Next x2 (first Next records first and shows next, second records second)
     nextBtn.click();
     nextBtn.click();
 
@@ -99,6 +98,59 @@ describe('Integration: new session, Next x3, Undo x1, Reset', () => {
     } finally {
       global.Blob = BlobOrig;
     }
+  });
+
+  test('answer editor persists per question and warns on delete', () => {
+    // Create session
+    const input = document.querySelector('input[aria-label="New session name"]');
+    const createBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === 'Create');
+    input.value = 'Answers';
+    input.dispatchEvent(new Event('input'));
+    createBtn.click();
+
+    // Show first question (preview), confirm it so we can save answer
+    const nextBtn = document.getElementById('nextBtn');
+    nextBtn.click();
+
+    const textarea = document.getElementById('answerText');
+    expect(textarea).toBeTruthy();
+    textarea.value = 'My notes';
+    textarea.dispatchEvent(new Event('input'));
+    // blur triggers autosave
+    textarea.dispatchEvent(new Event('blur'));
+
+    // Rerender modules to simulate reload
+    document.body.innerHTML = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+    jest.resetModules();
+    require('../public/sessionStore');
+    require('../public/selectionUtils');
+    require('../public/askedList');
+    require('../public/sessionPicker');
+    require('../public/script');
+
+    // Open existing session
+    const select = document.getElementById('sessionSelect');
+    select.value = 'Answers';
+    select.dispatchEvent(new Event('change'));
+    const open = document.getElementById('openSessionBtn');
+    open.click();
+
+    // Saved answer should be present when we land on the current question
+    const textarea2 = document.getElementById('answerText');
+    expect(textarea2.value).toBe('My notes');
+
+    // Render a SessionPicker in page to access Delete (overlay is closed after open)
+    const host = document.getElementById('session-section');
+    const SessionPicker = require('../public/sessionPicker');
+    const SessionStore = require('../public/sessionStore');
+    SessionPicker.render(host, { sessions: SessionStore.getAll(), onOpen: () => {} });
+    const select2 = document.getElementById('sessionSelect');
+    select2.value = 'Answers';
+    select2.dispatchEvent(new Event('change'));
+    const deleteBtn = document.getElementById('deleteSessionBtn');
+    deleteBtn.click();
+    const dialog = document.querySelector('[role="dialog"]');
+    expect(dialog.textContent).toMatch(/delete saved answers/i);
   });
 });
 

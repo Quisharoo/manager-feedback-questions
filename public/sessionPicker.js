@@ -164,10 +164,12 @@
                                 dialog.setAttribute('aria-modal', 'true');
                                 dialog.setAttribute('aria-labelledby', 'delTitle');
                                 dialog.tabIndex = -1;
+                                const hasAnswers = !!(window.SessionStore && typeof window.SessionStore.hasAnswers === 'function' && window.SessionStore.hasAnswers(name));
                                 dialog.innerHTML = `
                                         <h2 id=\"delTitle\" class=\"text-sm font-semibold mb-2\">Delete session</h2>
-                                        <div class=\"text-sm mb-3\">Delete session <span class=\"font-semibold\">${name}</span>? This cannot be undone.</div>
-                                        <div class=\"flex justify-end gap-2\">
+                                        <div class=\"text-sm mb-1\">Delete session <span class=\"font-semibold\">${name}</span>? This cannot be undone.</div>
+                                        ${hasAnswers ? '<div class=\"text-xs text-red-600 mb-3\">This will also delete saved answers.</div>' : '<div class=\"mb-3\"></div>'}
+                                        <div class=\"flex justify-end gap-2\"> 
                                                 <button id=\"delCancel\" class=\"px-3 py-1 border border-gray-300 rounded\">Cancel</button>
                                                 <button id=\"delConfirm\" class=\"btn-primary text-white px-3 py-1 rounded\">Delete</button>
                                         </div>`;

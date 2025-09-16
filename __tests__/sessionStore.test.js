@@ -46,6 +46,20 @@ describe('SessionStore', () => {
     const s = SessionStore.open('Legacy');
     expect(new Set(s.askedIds)).toEqual(new Set(['a', 'b', 'c']));
   });
+
+  test('answers persist per question id and clear on reset', () => {
+    SessionStore.create('Ans');
+    SessionStore.setAnswer('Ans', 'q1', 'Hello');
+    let s = SessionStore.open('Ans');
+    expect(s.answers['q1']).toBe('Hello');
+    expect(SessionStore.getAnswer('Ans', 'q1')).toBe('Hello');
+    expect(SessionStore.hasAnswers('Ans')).toBe(true);
+    SessionStore.reset('Ans');
+    s = SessionStore.open('Ans');
+    expect(s.answers && Object.keys(s.answers).length).toBe(0);
+    expect(SessionStore.getAnswer('Ans', 'q1')).toBe('');
+    expect(SessionStore.hasAnswers('Ans')).toBe(false);
+  });
 });
 
 
