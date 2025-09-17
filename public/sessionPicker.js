@@ -298,7 +298,19 @@
                                 let handled = false;
                                 try {
                                         const u = new URL(window.location.href);
-                                        if (u.searchParams.get('cap') === '1') {
+                                        const admin = u.searchParams.get('admin') === '1';
+                                        const cap = u.searchParams.get('cap') === '1';
+                                        if (admin) {
+                                                const key = sessionStorage.getItem('mfq_admin_key') || '';
+                                                const res = await fetch('/api/admin/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Key ' + key }, body: JSON.stringify({ name }) });
+                                                if (res.ok) {
+                                                        const json = await res.json();
+                                                        if (json && json.links && json.links.edit) {
+                                                                window.location.href = json.links.edit;
+                                                                handled = true;
+                                                        }
+                                                }
+                                        } else if (cap) {
                                                 const res = await fetch('/api/capsessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
                                                 if (res.ok) {
                                                         const json = await res.json();

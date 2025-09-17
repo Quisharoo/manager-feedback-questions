@@ -115,7 +115,14 @@ function logRequest(req, extra) {
       cookie: headers.cookie ? '(present)' : undefined,
     };
     // eslint-disable-next-line no-console
-    console.info('[api] request', { method: req.method, url: req.url, headers: loggedHeaders, ...extra });
+    // redact any key in query string
+    let safeUrl = req.url || '';
+    try {
+      const u = new URL(req.url, 'http://localhost');
+      if (u.searchParams.has('key')) u.searchParams.set('key', 'REDACTED');
+      safeUrl = u.pathname + (u.search ? u.search : '');
+    } catch {}
+    console.info('[api] request', { method: req.method, url: safeUrl, headers: loggedHeaders, ...extra });
   } catch (e) {
     // eslint-disable-next-line no-console
     console.info('[api] request');

@@ -1,37 +1,3 @@
 {
-  "sessions": {
-    "e208b174-3518-4f9f-afa6-22530a930fe8": {
-      "id": "e208b174-3518-4f9f-afa6-22530a930fe8",
-      "name": "OLED",
-      "asked": [
-        {
-          "text": "Is there a conversation we haven't had yet that we probably should?"
-        },
-        {
-          "text": "Do you feel like you have enough focus time to get real work done?"
-        },
-        {
-          "text": "What are your biggest time-wasters right now?"
-        },
-        {
-          "text": "Would it help to reprioritize anything?"
-        },
-        {
-          "text": "What's something you wish people talked about more openly on the team?"
-        }
-      ],
-      "skipped": [],
-      "editKeyHash": "1xMal4VJCUqbgOiBoQ04oFd5rEfABp6Q33uAA7Kqp9Q=",
-      "createdAt": 1758116785177,
-      "lastAccess": 1758116819244,
-      "cap": true,
-      "answers": {
-        "Is there a conversation we haven't had yet that we probably should?": "ASDASDD",
-        "Do you feel like you have enough focus time to get real work done?": "Answered",
-        "What are your biggest time-wasters right now?": "",
-        "Would it help to reprioritize anything?": "",
-        "What's something you wish people talked about more openly on the team?": "TESTING"
-      }
-    }
-  }
+  "sessions": {}
 }
