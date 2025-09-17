@@ -93,6 +93,15 @@
             if (!res.ok) throw new Error('Failed to update session');
             return res.json();
         }
+        async function apiPatchCap(id, key, body) {
+            const res = await fetch(`/api/capsessions/${encodeURIComponent(id)}?key=${encodeURIComponent(key)}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body || {})
+            });
+            if (!res.ok) throw new Error('Failed to update session');
+            return res.json();
+        }
 
         function mapAskedToIds(askedArray) {
             const texts = Array.isArray(askedArray) ? askedArray.map(q => (q && q.text) || '') : [];
@@ -111,7 +120,14 @@
                 // Synthesize timestamps for display (approximate ordering)
                 const base = Date.now();
                 const timestamps = askedIds.map((_, i) => base - (askedIds.length - 1 - i) * 1000);
-                activeSession = { name: data.name || 'session', askedIds, timestamps };
+                // Map server answers keyed by question text to local IDs
+                const answers = (data && data.answers && typeof data.answers === 'object') ? data.answers : {};
+                const idToAnswer = {};
+                for (const [text, value] of Object.entries(answers)) {
+                    const entry = Array.from(idMap.byId.values()).find(q => q && q.text === text);
+                    if (entry && typeof value === 'string' && value.trim() !== '') idToAnswer[String(entry.id)] = value;
+                }
+                activeSession = { name: data.name || 'session', askedIds, timestamps, answers: idToAnswer };
                 window.__activeSessionName = activeSession.name;
                 // Choose next question or show current if any
                 const askedSet = new Set(activeSession.askedIds);
@@ -124,7 +140,8 @@
                 }
                 updateSessionInfo();
                 if (askedContainer && window.AskedList) {
-                    window.AskedList.update(askedContainer, { askedIds: activeSession.askedIds, timestamps: activeSession.timestamps, answeredIds: [] });
+                    const answeredIds = Object.keys(idToAnswer);
+                    window.AskedList.update(askedContainer, { askedIds: activeSession.askedIds, timestamps: activeSession.timestamps, answeredIds });
                 }
                 unlockApp();
             } catch (e) {
@@ -271,10 +288,16 @@
             isAdvancing = true;
             // Save current answer implicitly
             try {
-                if (!isServerMode) {
-                    const textarea = document.getElementById('answerText');
-                    if (textarea && currentQuestionId && activeSession && window.SessionStore && typeof window.SessionStore.setAnswer === 'function') {
-                        window.SessionStore.setAnswer(activeSession.name, currentQuestionId, textarea.value || '');
+                const textarea = document.getElementById('answerText');
+                if (textarea && currentQuestionId && activeSession) {
+                    const val = textarea.value || '';
+                    if (isServerMode) {
+                        const q = idMap.byId.get(currentQuestionId);
+                        await apiPatchCap(serverSessionId, serverSessionKey, { action: 'setAnswer', question: { text: q && q.text }, value: val });
+                        if (!activeSession.answers || typeof activeSession.answers !== 'object') activeSession.answers = {};
+                        activeSession.answers[String(currentQuestionId)] = val;
+                    } else if (window.SessionStore && typeof window.SessionStore.setAnswer === 'function') {
+                        window.SessionStore.setAnswer(activeSession.name, currentQuestionId, val);
                     }
                 }
             } catch {}
@@ -306,7 +329,7 @@
             if (historyChip) historyChip.classList.add('hidden');
             updateSessionInfo();
             if (askedContainer && window.AskedList) {
-                const answeredIds = (!isServerMode && activeSession.answers) ? Object.entries(activeSession.answers || {}).filter(([,v]) => typeof v === 'string' && v.trim() !== '').map(([k]) => String(k)) : [];
+                const answeredIds = activeSession.answers ? Object.entries(activeSession.answers || {}).filter(([,v]) => typeof v === 'string' && v.trim() !== '').map(([k]) => String(k)) : [];
                 window.AskedList.update(askedContainer, { askedIds: activeSession.askedIds, timestamps: activeSession.timestamps, answeredIds });
             }
             isAdvancing = false;
