@@ -58,7 +58,7 @@ app.post('/api/sessions', (req, res) => {
     editKey = genKey(192);
     editKeyHash = hashKey(editKey);
   }
-  const extra = editKeyHash ? { editKeyHash, createdAt: Date.now(), lastAccess: Date.now() } : {};
+  const extra = editKeyHash ? { editKeyHash, createdAt: Date.now(), lastAccess: Date.now(), answers: {} } : { answers: {} };
   const session = createSession(name || '', extra);
   const base = `${req.protocol || 'http'}://${req.headers.host}`;
   const links = editKey ? { edit: `${base}/?id=${session.id}&key=${editKey}` } : undefined;
@@ -110,6 +110,14 @@ app.patch('/api/sessions/:id', async (req, res) => {
           if (idx !== -1) session.skipped.splice(idx, 1);
         }
         break;
+      case 'setAnswer':
+        if (!session.answers || typeof session.answers !== 'object') session.answers = {};
+        {
+          const key = question && question.text ? String(question.text) : '';
+          const value = (req.body && typeof req.body.value === 'string') ? req.body.value : '';
+          if (key) session.answers[key] = value;
+        }
+        break;
       case 'markSkipped':
         if (question && question.text) {
           session.skipped.push(question);
@@ -147,7 +155,7 @@ app.post('/api/capsessions', (req, res) => {
   // Always generate an edit key for capability sessions
   const editKey = genKey(192);
   const editKeyHash = hashKey(editKey);
-  const extra = { editKeyHash, createdAt: Date.now(), lastAccess: Date.now(), cap: true };
+  const extra = { editKeyHash, createdAt: Date.now(), lastAccess: Date.now(), cap: true, answers: {} };
   const session = createSession(name || '', extra);
   const base = `${req.protocol || 'http'}://${req.headers.host}`;
   const links = { edit: `${base}/?id=${session.id}&key=${editKey}&cap=1` };
@@ -180,6 +188,14 @@ app.patch('/api/capsessions/:id', async (req, res) => {
           s.asked.push(question);
           const idx = s.skipped.findIndex(q => q.text === question.text);
           if (idx !== -1) s.skipped.splice(idx, 1);
+        }
+        break;
+      case 'setAnswer':
+        if (!s.answers || typeof s.answers !== 'object') s.answers = {};
+        {
+          const key = question && question.text ? String(question.text) : '';
+          const value = (req.body && typeof req.body.value === 'string') ? req.body.value : '';
+          if (key) s.answers[key] = value;
         }
         break;
       case 'markSkipped':
