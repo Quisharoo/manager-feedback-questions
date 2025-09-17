@@ -63,14 +63,31 @@
                         const trimmed = (input.value || '').trim();
                         createBtn.disabled = !trimmed || (window.SessionStore && window.SessionStore.exists(trimmed));
                 });
-                createBtn.addEventListener('click', () => {
+                createBtn.addEventListener('click', async () => {
                         const name = (input.value || '').trim();
                         if (!name) return;
-                        state.onCreate && state.onCreate(name);
-                        input.value = '';
-                        createBtn.disabled = true;
-                        form.classList.add('hidden');
-                        toggleBtn.classList.remove('hidden');
+                        // If URL has ?cap=1, create a server capability session instead of local-only
+                        let handled = false;
+                        try {
+                                const u = new URL(window.location.href);
+                                if (u.searchParams.get('cap') === '1') {
+                                        const res = await fetch('/api/capsessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+                                        if (res.ok) {
+                                                const json = await res.json();
+                                                if (json && json.links && json.links.edit) {
+                                                        window.location.href = json.links.edit; // redirect to shareable link with id+key
+                                                        handled = true;
+                                                }
+                                        }
+                                }
+                        } catch {}
+                        if (!handled) {
+                                state.onCreate && state.onCreate(name);
+                                input.value = '';
+                                createBtn.disabled = true;
+                                form.classList.add('hidden');
+                                toggleBtn.classList.remove('hidden');
+                        }
                 });
 
                 area.appendChild(toggleBtn);
@@ -275,12 +292,40 @@
                                 const trimmed = (input.value || '').trim();
                                 createBtn.disabled = !trimmed || (window.SessionStore && window.SessionStore.exists(trimmed));
                         });
-                        function submitCreate() {
+                        async function submitCreate() {
                                 const name = (input.value || '').trim();
                                 if (!name) return;
-                                state.onCreate && state.onCreate(name);
-                                input.value = '';
-                                createBtn.disabled = true;
+                                let handled = false;
+                                try {
+                                        const u = new URL(window.location.href);
+                                        const admin = u.searchParams.get('admin') === '1';
+                                        const cap = u.searchParams.get('cap') === '1';
+                                        if (admin) {
+                                                const key = sessionStorage.getItem('mfq_admin_key') || '';
+                                                const res = await fetch('/api/admin/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Key ' + key }, body: JSON.stringify({ name }) });
+                                                if (res.ok) {
+                                                        const json = await res.json();
+                                                        if (json && json.links && json.links.edit) {
+                                                                window.location.href = json.links.edit;
+                                                                handled = true;
+                                                        }
+                                                }
+                                        } else if (cap) {
+                                                const res = await fetch('/api/capsessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+                                                if (res.ok) {
+                                                        const json = await res.json();
+                                                        if (json && json.links && json.links.edit) {
+                                                                window.location.href = json.links.edit;
+                                                                handled = true;
+                                                        }
+                                                }
+                                        }
+                                } catch {}
+                                if (!handled) {
+                                        state.onCreate && state.onCreate(name);
+                                        input.value = '';
+                                        createBtn.disabled = true;
+                                }
                         }
                         createBtn.addEventListener('click', submitCreate);
                         input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !createBtn.disabled) { e.preventDefault(); submitCreate(); } });
