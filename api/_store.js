@@ -15,6 +15,20 @@ try {
   }
 } catch {}
 
+// Fallback: detect Upstash Redis REST envs and create a minimal kv shim
+try {
+  if (!useKV && process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+    // eslint-disable-next-line global-require
+    const { Redis } = require('@upstash/redis');
+    const redis = new Redis({ url: process.env.UPSTASH_REDIS_REST_URL, token: process.env.UPSTASH_REDIS_REST_TOKEN });
+    kv = {
+      async get(key) { return redis.get(key); },
+      async set(key, value) { return redis.set(key, value); },
+    };
+    useKV = true;
+  }
+} catch {}
+
 let fileStore = null;
 if (!useKV) {
   // eslint-disable-next-line global-require
