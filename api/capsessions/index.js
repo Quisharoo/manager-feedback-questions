@@ -44,7 +44,7 @@ module.exports = async (req, res) => {
   const editKey = genKey();
   const editKeyHash = hashKey(editKey);
   const session = await store.createSession(name, { editKeyHash, createdAt: Date.now(), lastAccess: Date.now(), cap: true });
-  const host = (req.headers && req.headers.host) || '';
+  const host = (req.headers && req.headers.host) || 'localhost';
   const proto = (req.headers && req.headers['x-forwarded-proto']) || 'http';
   const base = `${proto}://${host}`;
   const links = { edit: `${base}/?id=${session.id}&key=${editKey}&cap=1` };
