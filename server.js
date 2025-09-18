@@ -22,7 +22,7 @@ function extractKey(req) {
   const q = req.query && req.query.key;
   const auth = req.headers && req.headers.authorization;
   const m = auth && auth.match(/^Key\s+(.+)$/i);
-  return q || (m && m[1]) || '';
+  return (q || (m && m[1]) || '').trim();
 }
 function isAdmin(req) {
   if (!ADMIN_KEY) return false;
