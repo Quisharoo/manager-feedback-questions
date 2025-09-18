@@ -9,7 +9,7 @@ function genKey(bits = 192) { return crypto.randomBytes(bits / 8).toString('base
 function extractKey(req) {
   const auth = req.headers && req.headers.authorization;
   const m = auth && auth.match(/^Key\s+(.+)$/i);
-  return (m && m[1]) || '';
+  return ((m && m[1]) || '').trim();
 }
 function isAdmin(req) {
   if (!ADMIN_KEY) return false;
