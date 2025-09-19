@@ -1,13 +1,14 @@
 {
   "sessions": {
-    "b061df26-fdb9-4072-9dcc-69f1db763e7a": {
-      "id": "b061df26-fdb9-4072-9dcc-69f1db763e7a",
+    "ed293e1d-aee1-4b67-9aa0-19395ddd16b8": {
+      "id": "ed293e1d-aee1-4b67-9aa0-19395ddd16b8",
       "name": "Cap A",
       "asked": [],
       "skipped": [],
-      "editKeyHash": "xRX+IFoqNEQhtZLCUSrlLg+Qwu0tasN1PaEeNHs3OvI=",
-      "createdAt": 1758281888784,
-      "lastAccess": 1758281888797,
+      "editKeyHash": "9fntPaDNBxCmlX66q1IjFj71GsYuRB77ozotuOTACpU=",
+      "viewKeyHash": "NDQmObmZ0IKsGiDBms470R9w15z9m0T8CV4FdoZgtlU=",
+      "createdAt": 1758283707707,
+      "lastAccess": 1758283707736,
       "cap": true,
       "answers": {}
     }
