@@ -100,6 +100,16 @@ describe('serverless /api/capsessions', () => {
     await get2Res.done;
     const body = parseJson(get2Res);
     expect(body.answers && body.answers[q.text]).toBe('My notes');
+
+    // Reset clears asked and answers
+    const resetReq = makeReq({ method: 'PATCH', url: `/api/capsessions/${id}?key=${key}`, headers: { 'content-type': 'application/json' }, body: { action: 'reset' }, query: { id, key } });
+    const resetRes = makeRes();
+    await idHandler(resetReq, resetRes);
+    await resetRes.done;
+    expect(resetRes.statusCode).toBe(200);
+    const afterReset = parseJson(resetRes);
+    expect(Array.isArray(afterReset.asked) && afterReset.asked.length).toBe(0);
+    expect(afterReset.answers && Object.keys(afterReset.answers).length).toBe(0);
   });
 });
 

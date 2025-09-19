@@ -198,12 +198,31 @@
             // Wire up answer editor
             try {
                 const textarea = document.getElementById('answerText');
-                const initial = (activeSession && window.SessionStore && typeof window.SessionStore.getAnswer === 'function') ? window.SessionStore.getAnswer(activeSession.name, id) : '';
+                const initial = (function() {
+                    // In server mode, prefer server-loaded answers map
+                    if (isServerMode && activeSession && activeSession.answers && typeof activeSession.answers === 'object') {
+                        const v = activeSession.answers[String(id)];
+                        return typeof v === 'string' ? v : '';
+                    }
+                    // Local mode falls back to SessionStore
+                    return (activeSession && window.SessionStore && typeof window.SessionStore.getAnswer === 'function') ? window.SessionStore.getAnswer(activeSession.name, id) : '';
+                })();
                 textarea.value = initial;
-                textarea.addEventListener('blur', () => {
+                textarea.addEventListener('blur', async () => {
                     if (!activeSession) return;
                     const val = textarea.value || '';
-                    if (window.SessionStore && typeof window.SessionStore.setAnswer === 'function') {
+                    if (isServerMode) {
+                        try {
+                            const q = idMap.byId.get(id);
+                            await apiPatchCap(serverSessionId, serverSessionKey, { action: 'setAnswer', question: { text: q && q.text }, value: val });
+                            if (!activeSession.answers || typeof activeSession.answers !== 'object') activeSession.answers = {};
+                            activeSession.answers[String(id)] = val;
+                            if (askedContainer && window.AskedList) {
+                                const answeredIds = Object.entries(activeSession.answers || {}).filter(([,v]) => typeof v === 'string' && v.trim() !== '').map(([k]) => String(k));
+                                window.AskedList.update(askedContainer, { askedIds: activeSession.askedIds, timestamps: activeSession.timestamps, answeredIds });
+                            }
+                        } catch {}
+                    } else if (window.SessionStore && typeof window.SessionStore.setAnswer === 'function') {
                         window.SessionStore.setAnswer(activeSession.name, id, val);
                         activeSession = window.SessionStore.open(activeSession.name);
                         if (askedContainer && window.AskedList) {
