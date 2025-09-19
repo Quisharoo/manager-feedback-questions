@@ -656,3 +656,127 @@
                 }
             } catch {}
         });
+
+ 
+// --- Admin setup modal + auto-verify ---
+(function () {
+    function toast(msg) {
+        const t = document.createElement('div');
+        t.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-sm px-3 py-1.5 rounded shadow';
+        t.textContent = msg;
+        document.body.appendChild(t);
+        setTimeout(() => { t.remove(); }, 2500);
+    }
+
+    async function validateAdminKey(key) {
+        const res = await fetch('/api/admin/sessions', { headers: { Authorization: 'Key ' + key } });
+        if (!res.ok) throw new Error('Invalid');
+        return res.json().catch(() => ({}));
+    }
+
+    function openAdminDialog(opts) {
+        opts = opts || {};
+        const preset = typeof opts.preset === 'string' ? opts.preset : '';
+        const error = typeof opts.error === 'string' ? opts.error : '';
+        const overlay = document.createElement('div');
+        overlay.className = 'fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50';
+        const dialog = document.createElement('div');
+        dialog.className = 'bg-white rounded-lg p-4 w-full max-w-sm shadow-lg';
+        dialog.setAttribute('role', 'dialog');
+        dialog.setAttribute('aria-modal', 'true');
+        dialog.setAttribute('aria-labelledby', 'adminTitle');
+        dialog.tabIndex = -1;
+        const safePreset = preset.replace(/"/g, '&quot;');
+        dialog.innerHTML = `
+            <h2 id="adminTitle" class="text-sm font-semibold mb-2">Admin mode</h2>
+            <div class="text-sm mb-3">Enter the admin key to enable server-backed sessions.</div>
+            <label class="block text-xs text-gray-700 mb-1" for="adminKeyInput">Admin key</label>
+            <input id="adminKeyInput" type="password" class="w-full border border-gray-300 rounded-lg px-3 py-2 mb-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" value="${safePreset}">
+            ${error ? '<div class="text-xs text-red-600 mb-2">' + error + '</div>' : '<div class="mb-2"></div>'}
+            <div class="flex justify-end gap-2">
+                <button id="adminCancel" class="px-3 py-1 border border-gray-300 rounded">Cancel</button>
+                <button id="adminConfirm" class="btn-primary text-white px-3 py-1 rounded">Verify</button>
+            </div>
+        `;
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+
+        const prevOverflow = document.body.style.overflow;
+        const prevPaddingRight = document.body.style.paddingRight;
+        const scrollBarWidth = window.innerWidth - document.documentElement.clientWidth;
+        if (scrollBarWidth > 0) document.body.style.paddingRight = String(scrollBarWidth) + 'px';
+        document.body.style.overflow = 'hidden';
+
+        const input = dialog.querySelector('#adminKeyInput');
+        const cancelBtn = dialog.querySelector('#adminCancel');
+        const confirmBtn = dialog.querySelector('#adminConfirm');
+
+        function close(options) {
+            options = options || {};
+            const restore = options.restore === false ? false : true;
+            overlay.remove();
+            if (restore) {
+                document.body.style.overflow = prevOverflow;
+                document.body.style.paddingRight = prevPaddingRight;
+            }
+        }
+
+        overlay.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') { e.preventDefault(); close(); }
+            if (e.key === 'Enter') { e.preventDefault(); confirmBtn.click(); }
+        });
+        cancelBtn.addEventListener('click', () => close());
+        confirmBtn.addEventListener('click', async () => {
+            const key = (input.value || '').trim();
+            if (!key) return;
+            try {
+                const json = await validateAdminKey(key);
+                try { sessionStorage.setItem('mfq_admin_key', key); } catch {}
+                close();
+                const names = Array.isArray(json.sessions) ? json.sessions.map(s => s.name).filter(Boolean) : [];
+                toast(names.length ? 'Admin OK • ' + names.length + ' sessions' : 'Admin OK');
+            } catch (e) {
+                close({ restore: false });
+                openAdminDialog({ preset: input.value || '', error: 'Invalid admin key. Try again.' });
+            }
+        });
+
+        setTimeout(() => { try { input.focus(); } catch {} }, 0);
+    }
+
+    function init() {
+        try {
+            const u = new URL(window.location.href);
+            if (u.searchParams.get('admin') !== '1') return;
+        } catch { return; }
+
+        const banner = document.getElementById('adminBanner');
+        if (banner) banner.classList.remove('hidden');
+
+        let existing = '';
+        try { existing = sessionStorage.getItem('mfq_admin_key') || ''; } catch {}
+        if (!existing) {
+            openAdminDialog();
+            return;
+        }
+        validateAdminKey(existing).then(() => {
+            // valid, stay silent
+        }).catch(() => {
+            openAdminDialog({ preset: existing, error: 'Saved key is no longer valid.' });
+        });
+    }
+
+    if (typeof window !== 'undefined') {
+        window.AdminUI = { init: init };
+    }
+})();
+
+// Auto-init in environments that don't execute inline HTML scripts (e.g., Jest jsdom)
+(function(){
+    try {
+        const u = new URL(window.location.href);
+        if (u.searchParams.get('admin') === '1' && window.AdminUI && typeof window.AdminUI.init === 'function') {
+            window.AdminUI.init();
+        }
+    } catch {}
+})();

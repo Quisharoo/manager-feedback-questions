@@ -1,3 +1,15 @@
 {
-  "sessions": {}
+  "sessions": {
+    "b061df26-fdb9-4072-9dcc-69f1db763e7a": {
+      "id": "b061df26-fdb9-4072-9dcc-69f1db763e7a",
+      "name": "Cap A",
+      "asked": [],
+      "skipped": [],
+      "editKeyHash": "xRX+IFoqNEQhtZLCUSrlLg+Qwu0tasN1PaEeNHs3OvI=",
+      "createdAt": 1758281888784,
+      "lastAccess": 1758281888797,
+      "cap": true,
+      "answers": {}
+    }
+  }
 }
