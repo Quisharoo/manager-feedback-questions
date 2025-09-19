@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Session Results</title>
+    <meta name="referrer" content="no-referrer">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="min-h-screen bg-gray-50">
+    <div class="max-w-4xl mx-auto p-4">
+        <div class="flex items-center justify-between mb-6">
+            <h1 class="text-2xl font-semibold text-indigo-700">Session Results</h1>
+            <a href="/" class="text-sm text-indigo-600 underline">Back to app</a>
+        </div>
+        <div id="info" class="text-sm text-gray-600 mb-4"></div>
+        <div id="content" class="bg-white rounded-lg shadow p-4">
+            <div id="loading" class="text-gray-500">Loading…</div>
+            <div id="error" class="hidden text-red-600">Failed to load session. Check the link.</div>
+            <div id="results" class="hidden">
+                <div class="mb-4">
+                    <button id="exportJson" class="btn-primary text-white px-3 py-1 rounded mr-2">Export JSON</button>
+                    <button id="exportCsv" class="btn-primary text-white px-3 py-1 rounded">Export CSV</button>
+                </div>
+                <div id="answers"></div>
+            </div>
+        </div>
+    </div>
+    <script src="selectionUtils.js"></script>
+    <script src="askedList.js"></script>
+    <script src="results.js"></script>
+    <style>
+        .btn-primary { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); }
+    </style>
+</body>
+</html>
+
+

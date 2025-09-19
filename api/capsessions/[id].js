@@ -12,13 +12,25 @@ function extractKey(req) {
   return q || (m && m[1]) || '';
 }
 
-function keyAllows(session, key) {
+function keyAllowsRead(session, key) {
   if (!session || !session.editKeyHash) return false;
   if (!key) return false;
   try {
-    const a = Buffer.from(hashKey(key));
-    const b = Buffer.from(String(session.editKeyHash || ''));
-    return a.length === b.length && crypto.timingSafeEqual(a, b);
+    const provided = Buffer.from(hashKey(key));
+    const editHash = Buffer.from(String(session.editKeyHash || ''));
+    const viewHash = Buffer.from(String(session.viewKeyHash || ''));
+    const matchesEdit = (provided.length === editHash.length) && crypto.timingSafeEqual(provided, editHash);
+    const matchesView = (viewHash.length > 0) && (provided.length === viewHash.length) && crypto.timingSafeEqual(provided, viewHash);
+    return matchesEdit || matchesView;
+  } catch { return false; }
+}
+function keyAllowsWrite(session, key) {
+  if (!session || !session.editKeyHash) return false;
+  if (!key) return false;
+  try {
+    const provided = Buffer.from(hashKey(key));
+    const editHash = Buffer.from(String(session.editKeyHash || ''));
+    return provided.length === editHash.length && crypto.timingSafeEqual(provided, editHash);
   } catch { return false; }
 }
 
@@ -36,7 +48,7 @@ module.exports = async (req, res) => {
     return res.end(JSON.stringify({ error: 'Not found' }));
   }
   const key = extractKey(req);
-  if (!keyAllows(session, key)) {
+  if (!keyAllowsRead(session, key)) {
     res.statusCode = 403;
     res.setHeader('Content-Type', 'application/json');
     return res.end(JSON.stringify({ error: 'Forbidden' }));
@@ -51,6 +63,11 @@ module.exports = async (req, res) => {
   }
 
   if (req.method === 'PATCH') {
+    if (!keyAllowsWrite(session, key)) {
+      res.statusCode = 403;
+      res.setHeader('Content-Type', 'application/json');
+      return res.end(JSON.stringify({ error: 'Forbidden' }));
+    }
     const body = await parseBody(req);
     const action = body.action;
     const question = body.question; // { text }
