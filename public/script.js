@@ -529,6 +529,8 @@
                 if (undoBtn) undoBtn.classList.add('hidden');
                 if (resetBtn) resetBtn.classList.add('hidden');
                 if (resultsBtn) resultsBtn.classList.add('hidden');
+                const adminFab = document.getElementById('adminCreateBtn');
+                if (adminFab) adminFab.classList.add('hidden');
                 if (questionCard) questionCard.classList.add('hidden');
             } catch {}
 
@@ -611,6 +613,10 @@
                 if (resetBtn) resetBtn.classList.remove('hidden');
                 ensureResultsButton();
                 if (resultsBtn) resultsBtn.classList.remove('hidden');
+                try {
+                    const key = sessionStorage.getItem('mfq_admin_key') || '';
+                    if (key) ensureAdminControls(key);
+                } catch {}
                 if (questionCard) questionCard.classList.remove('hidden');
             } catch {}
             const overlay = document.getElementById('sessionGateOverlay');
@@ -810,13 +816,34 @@
 
     function ensureAdminControls(adminKey) {
         if (!adminKey) return;
-        if (document.getElementById('adminCreateBtn')) return;
-        const btn = document.createElement('button');
-        btn.id = 'adminCreateBtn';
-        btn.className = 'fixed bottom-6 right-6 btn-primary text-white px-4 py-2 rounded-full shadow-lg';
-        btn.textContent = 'Create session';
-        btn.addEventListener('click', () => openCreateServerSessionDialog(adminKey));
-        document.body.appendChild(btn);
+        const overlay = document.getElementById('sessionGateOverlay');
+        if (overlay) {
+            if (!document.getElementById('adminCreateBtnOverlay')) {
+                const host = overlay.querySelector('#sessionGateHost');
+                const container = document.createElement('div');
+                container.className = 'mt-3 flex justify-end';
+                const btn = document.createElement('button');
+                btn.id = 'adminCreateBtnOverlay';
+                btn.className = 'btn-primary text-white px-3 py-1 rounded';
+                btn.textContent = 'Create server session';
+                btn.addEventListener('click', () => openCreateServerSessionDialog(adminKey));
+                container.appendChild(btn);
+                if (host && host.parentElement) host.parentElement.appendChild(container); else overlay.appendChild(container);
+            }
+            const floatBtn = document.getElementById('adminCreateBtn');
+            if (floatBtn) floatBtn.classList.add('hidden');
+            return;
+        }
+        let floatBtn = document.getElementById('adminCreateBtn');
+        if (!floatBtn) {
+            floatBtn = document.createElement('button');
+            floatBtn.id = 'adminCreateBtn';
+            floatBtn.className = 'fixed bottom-6 right-6 btn-primary text-white px-4 py-2 rounded-full shadow-lg';
+            floatBtn.textContent = 'Create session';
+            floatBtn.addEventListener('click', () => openCreateServerSessionDialog(adminKey));
+            document.body.appendChild(floatBtn);
+        }
+        floatBtn.classList.remove('hidden');
     }
 
     function openAdminDialog(opts) {
