@@ -48,11 +48,13 @@ module.exports = async (req, res) => {
     const { randomBytes } = require('crypto');
     const editKey = randomBytes(24).toString('base64url');
     const editKeyHash = hashKey(editKey);
-    const session = await store.createSession(name, { editKeyHash, createdAt: Date.now(), lastAccess: Date.now() });
+    const viewKey = randomBytes(20).toString('base64url');
+    const viewKeyHash = hashKey(viewKey);
+    const session = await store.createSession(name, { editKeyHash, viewKeyHash, createdAt: Date.now(), lastAccess: Date.now(), answers: {} });
     const host = (req.headers && req.headers.host) || '';
     const proto = (req.headers && req.headers['x-forwarded-proto']) || 'http';
     const base = `${proto}://${host}`;
-    const links = { edit: `${base}/?id=${session.id}&key=${editKey}&cap=1` };
+    const links = { edit: `${base}/?id=${session.id}&key=${editKey}&cap=1`, view: `${base}/results.html?id=${session.id}&key=${viewKey}&cap=1` };
     res.statusCode = 201;
     res.setHeader('Content-Type', 'application/json');
     return res.end(JSON.stringify({ ...session, links }));
