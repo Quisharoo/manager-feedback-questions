@@ -1,21 +1,3 @@
 {
-  "sessions": {
-    "2d3d4636-cf25-450f-b704-7ca542e6f870": {
-      "id": "2d3d4636-cf25-450f-b704-7ca542e6f870",
-      "name": "Cap A",
-      "asked": [
-        {
-          "text": "Hello world?"
-        }
-      ],
-      "skipped": [],
-      "editKeyHash": "iFauF7E4sHNlpI665slszy005N5oyI3eWyTSGBYEUKA=",
-      "createdAt": 1758278862770,
-      "lastAccess": 1758278862778,
-      "cap": true,
-      "answers": {
-        "Hello world?": "My notes"
-      }
-    }
-  }
+  "sessions": {}
 }
