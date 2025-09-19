@@ -84,6 +84,11 @@
             if (!res.ok) throw new Error('Failed to load session');
             return res.json();
         }
+        async function apiGetCapSession(id, key) {
+            const res = await fetch(`/api/capsessions/${encodeURIComponent(id)}?key=${encodeURIComponent(key)}`);
+            if (!res.ok) throw new Error('Failed to load session');
+            return res.json();
+        }
         async function apiPatch(id, key, body) {
             const res = await fetch(`/api/sessions/${encodeURIComponent(id)}?key=${encodeURIComponent(key)}`, {
                 method: 'PATCH',
@@ -115,7 +120,7 @@
 
         async function serverLoadAndOpen() {
             try {
-                const data = await apiGetSession(serverSessionId, serverSessionKey);
+                const data = await apiGetCapSession(serverSessionId, serverSessionKey);
                 const askedIds = mapAskedToIds(data.asked || []);
                 // Synthesize timestamps for display (approximate ordering)
                 const base = Date.now();
