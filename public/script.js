@@ -44,6 +44,7 @@
         const nextBtn = document.getElementById('nextBtn');
         const undoBtn = document.getElementById('undoBtn');
         const resetBtn = document.getElementById('resetBtn');
+        let resultsBtn = null;
         const sessionBadge = document.getElementById('sessionBadge');
         const historyChip = document.getElementById('historyChip');
         const questionCard = document.querySelector('.question-card');
@@ -64,8 +65,8 @@
         function getUrlParams() {
             try {
                 const u = new URL(window.location.href);
-                return { id: u.searchParams.get('id') || '', key: u.searchParams.get('key') || '' };
-            } catch { return { id: '', key: '' }; }
+                return { id: u.searchParams.get('id') || '', key: u.searchParams.get('key') || '', cap: u.searchParams.get('cap') || '' };
+            } catch { return { id: '', key: '', cap: '' }; }
         }
         function persistKey(id, key) {
             try { if (id && key) sessionStorage.setItem('mfq_key_' + id, key); } catch {}
@@ -78,6 +79,20 @@
         const serverSessionKey = (params.key || getStoredKey(serverSessionId) || '');
         const isServerMode = !!(serverSessionId && serverSessionKey);
         if (isServerMode && params.key) persistKey(serverSessionId, serverSessionKey);
+
+        function ensureResultsButton() {
+            if (!isServerMode) return;
+            if (resultsBtn) return;
+            const parent = nextBtn && nextBtn.parentElement;
+            if (!parent) return;
+            resultsBtn = document.createElement('a');
+            resultsBtn.id = 'resultsBtn';
+            resultsBtn.className = 'btn-primary text-white font-bold py-4 px-8 rounded-full text-lg shadow-lg';
+            resultsBtn.textContent = 'Results';
+            const capParam = params.cap === '1' ? '&cap=1' : '';
+            resultsBtn.href = `/results.html?id=${encodeURIComponent(serverSessionId)}&key=${encodeURIComponent(serverSessionKey)}${capParam}`;
+            parent.appendChild(resultsBtn);
+        }
 
         async function apiGetSession(id, key) {
             const res = await fetch(`/api/sessions/${encodeURIComponent(id)}?key=${encodeURIComponent(key)}`);
@@ -513,6 +528,7 @@
                 if (nextBtn) nextBtn.classList.add('hidden');
                 if (undoBtn) undoBtn.classList.add('hidden');
                 if (resetBtn) resetBtn.classList.add('hidden');
+                if (resultsBtn) resultsBtn.classList.add('hidden');
                 if (questionCard) questionCard.classList.add('hidden');
             } catch {}
 
@@ -593,6 +609,8 @@
                 if (nextBtn) nextBtn.classList.remove('hidden');
                 if (undoBtn) undoBtn.classList.remove('hidden');
                 if (resetBtn) resetBtn.classList.remove('hidden');
+                ensureResultsButton();
+                if (resultsBtn) resultsBtn.classList.remove('hidden');
                 if (questionCard) questionCard.classList.remove('hidden');
             } catch {}
             const overlay = document.getElementById('sessionGateOverlay');
@@ -674,6 +692,133 @@
         return res.json().catch(() => ({}));
     }
 
+    function openShareLinksDialog(links) {
+        const overlay = document.createElement('div');
+        overlay.className = 'fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50';
+        const dialog = document.createElement('div');
+        dialog.className = 'bg-white rounded-lg p-4 w-full max-w-lg shadow-lg';
+        dialog.setAttribute('role', 'dialog');
+        dialog.setAttribute('aria-modal', 'true');
+        dialog.setAttribute('aria-labelledby', 'shareTitle');
+        dialog.tabIndex = -1;
+        const editLink = (links && links.edit) || '';
+        const viewLink = (links && links.view) || '';
+        dialog.innerHTML = `
+            <h2 id="shareTitle" class="text-sm font-semibold mb-2">Share links</h2>
+            <div class="text-xs text-gray-600 mb-3">Copy and share the appropriate link.</div>
+            <label class="block text-xs text-gray-700 mb-1">Edit link (full access)</label>
+            <div class="flex gap-2 mb-2">
+                <input id="shareEditInput" class="flex-1 w-full border border-gray-300 rounded px-2 py-1 text-xs" value="${editLink.replace(/"/g, '&quot;')}">
+                <button id="copyEdit" class="px-2 py-1 text-xs btn-primary text-white rounded">Copy</button>
+                <a id="openEdit" class="px-2 py-1 text-xs border border-gray-300 rounded" href="${editLink}" target="_blank" rel="noopener">Open</a>
+            </div>
+            <label class="block text-xs text-gray-700 mb-1 mt-3">View-only link</label>
+            <div class="flex gap-2 mb-4">
+                <input id="shareViewInput" class="flex-1 w-full border border-gray-300 rounded px-2 py-1 text-xs" value="${viewLink.replace(/"/g, '&quot;')}">
+                <button id="copyView" class="px-2 py-1 text-xs btn-primary text-white rounded">Copy</button>
+                <a id="openView" class="px-2 py-1 text-xs border border-gray-300 rounded" href="${viewLink}" target="_blank" rel="noopener">Open</a>
+            </div>
+            <div class="flex justify-end gap-2">
+                <button id="shareClose" class="px-3 py-1 border border-gray-300 rounded">Close</button>
+            </div>
+        `;
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+        const prevOverflow = document.body.style.overflow;
+        const prevPaddingRight = document.body.style.paddingRight;
+        const scrollBarWidth = window.innerWidth - document.documentElement.clientWidth;
+        if (scrollBarWidth > 0) document.body.style.paddingRight = String(scrollBarWidth) + 'px';
+        document.body.style.overflow = 'hidden';
+        function close() {
+            overlay.remove();
+            document.body.style.overflow = prevOverflow;
+            document.body.style.paddingRight = prevPaddingRight;
+        }
+        function bindCopy(btnId, inputId) {
+            const btn = dialog.querySelector(btnId);
+            const input = dialog.querySelector(inputId);
+            if (!btn || !input) return;
+            btn.addEventListener('click', async () => {
+                try {
+                    await navigator.clipboard.writeText(input.value || '');
+                    toast('Copied');
+                } catch {
+                    try { input.select(); document.execCommand('copy'); toast('Copied'); } catch {}
+                }
+            });
+        }
+        bindCopy('#copyEdit', '#shareEditInput');
+        bindCopy('#copyView', '#shareViewInput');
+        const closeBtn = dialog.querySelector('#shareClose');
+        closeBtn.addEventListener('click', () => close());
+        setTimeout(() => { try { dialog.focus(); } catch {} }, 0);
+    }
+
+    function openCreateServerSessionDialog(adminKey) {
+        const overlay = document.createElement('div');
+        overlay.className = 'fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50';
+        const dialog = document.createElement('div');
+        dialog.className = 'bg-white rounded-lg p-4 w-full max-w-sm shadow-lg';
+        dialog.setAttribute('role', 'dialog');
+        dialog.setAttribute('aria-modal', 'true');
+        dialog.setAttribute('aria-labelledby', 'createTitle');
+        dialog.tabIndex = -1;
+        dialog.innerHTML = `
+            <h2 id="createTitle" class="text-sm font-semibold mb-2">Create server session</h2>
+            <label class="block text-xs text-gray-700 mb-1" for="createName">Session name</label>
+            <input id="createName" class="w-full border border-gray-300 rounded px-3 py-2 mb-3" placeholder="e.g., Weekly 1:1 - Alice">
+            <div class="flex justify-end gap-2">
+                <button id="createCancel" class="px-3 py-1 border border-gray-300 rounded">Cancel</button>
+                <button id="createConfirm" class="btn-primary text-white px-3 py-1 rounded">Create</button>
+            </div>
+        `;
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+        const prevOverflow = document.body.style.overflow;
+        const prevPaddingRight = document.body.style.paddingRight;
+        const scrollBarWidth = window.innerWidth - document.documentElement.clientWidth;
+        if (scrollBarWidth > 0) document.body.style.paddingRight = String(scrollBarWidth) + 'px';
+        document.body.style.overflow = 'hidden';
+        function close() {
+            overlay.remove();
+            document.body.style.overflow = prevOverflow;
+            document.body.style.paddingRight = prevPaddingRight;
+        }
+        const input = dialog.querySelector('#createName');
+        const cancelBtn = dialog.querySelector('#createCancel');
+        const confirmBtn = dialog.querySelector('#createConfirm');
+        cancelBtn.addEventListener('click', () => close());
+        confirmBtn.addEventListener('click', async () => {
+            const name = (input.value || '').trim();
+            if (!name) return;
+            try {
+                const res = await fetch('/api/admin/sessions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: 'Key ' + adminKey },
+                    body: JSON.stringify({ name })
+                });
+                if (!res.ok) throw new Error('Failed');
+                const json = await res.json();
+                close();
+                if (json && json.links) openShareLinksDialog(json.links);
+            } catch {
+                toast('Failed to create');
+            }
+        });
+        setTimeout(() => { try { input.focus(); } catch {} }, 0);
+    }
+
+    function ensureAdminControls(adminKey) {
+        if (!adminKey) return;
+        if (document.getElementById('adminCreateBtn')) return;
+        const btn = document.createElement('button');
+        btn.id = 'adminCreateBtn';
+        btn.className = 'fixed bottom-6 right-6 btn-primary text-white px-4 py-2 rounded-full shadow-lg';
+        btn.textContent = 'Create session';
+        btn.addEventListener('click', () => openCreateServerSessionDialog(adminKey));
+        document.body.appendChild(btn);
+    }
+
     function openAdminDialog(opts) {
         opts = opts || {};
         const preset = typeof opts.preset === 'string' ? opts.preset : '';
@@ -735,6 +880,7 @@
                 close();
                 const names = Array.isArray(json.sessions) ? json.sessions.map(s => s.name).filter(Boolean) : [];
                 toast(names.length ? 'Admin OK • ' + names.length + ' sessions' : 'Admin OK');
+                ensureAdminControls(key);
             } catch (e) {
                 close({ restore: false });
                 openAdminDialog({ preset: input.value || '', error: 'Invalid admin key. Try again.' });
@@ -760,7 +906,8 @@
             return;
         }
         validateAdminKey(existing).then(() => {
-            // valid, stay silent
+            // valid, show quick controls
+            ensureAdminControls(existing);
         }).catch(() => {
             openAdminDialog({ preset: existing, error: 'Saved key is no longer valid.' });
         });

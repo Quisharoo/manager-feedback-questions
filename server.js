@@ -38,13 +38,22 @@ function keyAllowsRead(session, key) {
   if (!session || (!session.editKeyHash)) return true;
   if (!key) return false;
   try {
-    const a = Buffer.from(hashKey(key));
-    const b = Buffer.from(String(session.editKeyHash || ''));
-    return a.length === b.length && crypto.timingSafeEqual(a, b);
+    const provided = Buffer.from(hashKey(key));
+    const editHash = Buffer.from(String(session.editKeyHash || ''));
+    const viewHash = Buffer.from(String(session.viewKeyHash || ''));
+    const matchesEdit = (provided.length === editHash.length) && crypto.timingSafeEqual(provided, editHash);
+    const matchesView = (viewHash.length > 0) && (provided.length === viewHash.length) && crypto.timingSafeEqual(provided, viewHash);
+    return matchesEdit || matchesView;
   } catch { return false; }
 }
 function keyAllowsWrite(session, key) {
-  return keyAllowsRead(session, key);
+  if (!session || (!session.editKeyHash)) return false;
+  if (!key) return false;
+  try {
+    const provided = Buffer.from(hashKey(key));
+    const editHash = Buffer.from(String(session.editKeyHash || ''));
+    return provided.length === editHash.length && crypto.timingSafeEqual(provided, editHash);
+  } catch { return false; }
 }
 
 // --- API ---
@@ -52,16 +61,18 @@ app.post('/api/sessions', (req, res) => {
   // If ADMIN_KEY is configured, require it for creation
   if (ADMIN_KEY && !isAdmin(req)) return res.status(403).json({ error: 'Forbidden' });
   const name = (req.body && typeof req.body.name === 'string' && req.body.name.trim()) || null;
-  // Generate per-session edit key if ADMIN_KEY is enabled
-  let editKey, editKeyHash;
+  // Generate per-session keys if ADMIN_KEY is enabled
+  let editKey, editKeyHash, viewKey, viewKeyHash;
   if (ADMIN_KEY) {
     editKey = genKey(192);
     editKeyHash = hashKey(editKey);
+    viewKey = genKey(160);
+    viewKeyHash = hashKey(viewKey);
   }
-  const extra = editKeyHash ? { editKeyHash, createdAt: Date.now(), lastAccess: Date.now(), answers: {} } : { answers: {} };
+  const extra = editKeyHash ? { editKeyHash, viewKeyHash, createdAt: Date.now(), lastAccess: Date.now(), answers: {} } : { answers: {} };
   const session = createSession(name || '', extra);
   const base = `${req.protocol || 'http'}://${req.headers.host}`;
-  const links = editKey ? { edit: `${base}/?id=${session.id}&key=${editKey}` } : undefined;
+  const links = editKey ? { edit: `${base}/?id=${session.id}&key=${editKey}`, view: `${base}/results.html?id=${session.id}&key=${viewKey}` } : undefined;
   res.status(201).json(links ? { ...session, links } : session);
 });
 
@@ -155,10 +166,12 @@ app.post('/api/capsessions', (req, res) => {
   // Always generate an edit key for capability sessions
   const editKey = genKey(192);
   const editKeyHash = hashKey(editKey);
-  const extra = { editKeyHash, createdAt: Date.now(), lastAccess: Date.now(), cap: true, answers: {} };
+  const viewKey = genKey(160);
+  const viewKeyHash = hashKey(viewKey);
+  const extra = { editKeyHash, viewKeyHash, createdAt: Date.now(), lastAccess: Date.now(), cap: true, answers: {} };
   const session = createSession(name || '', extra);
   const base = `${req.protocol || 'http'}://${req.headers.host}`;
-  const links = { edit: `${base}/?id=${session.id}&key=${editKey}&cap=1` };
+  const links = { edit: `${base}/?id=${session.id}&key=${editKey}&cap=1`, view: `${base}/results.html?id=${session.id}&key=${viewKey}&cap=1` };
   res.status(201).json({ ...session, links });
 });
 
