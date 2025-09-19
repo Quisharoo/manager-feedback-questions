@@ -82,7 +82,8 @@ module.exports = async (req, res) => {
         case 'reset':
           s.asked = [];
           s.skipped = [];
-          s.answers = s.answers && typeof s.answers === 'object' ? s.answers : {};
+          // Clear all saved answers on reset to match UI behavior
+          s.answers = {};
           break;
         case 'setAnswer':
           s.answers = s.answers && typeof s.answers === 'object' ? s.answers : {};
