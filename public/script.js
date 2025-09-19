@@ -311,7 +311,7 @@
                 if (isServerMode) {
                     const q = idMap.byId.get(currentQuestionId);
                     try {
-                        await apiPatch(serverSessionId, serverSessionKey, { action: 'markAsked', question: { text: q && q.text } });
+                        await apiPatchCap(serverSessionId, serverSessionKey, { action: 'markAsked', question: { text: q && q.text } });
                         const now = Date.now();
                         activeSession.askedIds = (activeSession.askedIds || []).concat([currentQuestionId]);
                         activeSession.timestamps = (activeSession.timestamps || []).concat([now]);
@@ -349,7 +349,7 @@
             let last = null;
             if (isServerMode) {
                 try {
-                    await apiPatch(serverSessionId, serverSessionKey, { action: 'undoAsked' });
+                    await apiPatchCap(serverSessionId, serverSessionKey, { action: 'undoAsked' });
                     last = activeSession.askedIds.pop();
                     if (Array.isArray(activeSession.timestamps)) activeSession.timestamps.pop();
                 } catch {}
@@ -373,7 +373,7 @@
         function performReset() {
             if (!activeSession) return;
             if (isServerMode) {
-                apiPatch(serverSessionId, serverSessionKey, { action: 'reset' }).catch(() => {});
+                apiPatchCap(serverSessionId, serverSessionKey, { action: 'reset' }).catch(() => {});
                 activeSession.askedIds = [];
                 activeSession.timestamps = [];
             } else {
