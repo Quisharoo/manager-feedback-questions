@@ -1,5 +1,9 @@
 const path = require('path');
 
+function cleanEnv(value) {
+  return (value || '').trim().replace(/^"|"$/g, '').replace(/^'|'$/g, '');
+}
+
 // Storage abstraction for serverless handlers.
 // - If @vercel/kv is available and KV envs are set, use it
 // - Otherwise fallback to local file store (server/sessionStore.js)
@@ -7,6 +11,11 @@ const path = require('path');
 let kv = null;
 let useKV = false;
 try {
+  // Sanitize commonly mis-set KV envs and ensure RO token falls back to RW token
+  if (process.env.KV_REST_API_URL) process.env.KV_REST_API_URL = cleanEnv(process.env.KV_REST_API_URL);
+  if (process.env.KV_REST_API_TOKEN) process.env.KV_REST_API_TOKEN = cleanEnv(process.env.KV_REST_API_TOKEN);
+  if (process.env.KV_REST_API_READ_ONLY_TOKEN) process.env.KV_REST_API_READ_ONLY_TOKEN = cleanEnv(process.env.KV_REST_API_READ_ONLY_TOKEN);
+  if (process.env.KV_REST_API_TOKEN) process.env.KV_REST_API_READ_ONLY_TOKEN = process.env.KV_REST_API_TOKEN;
   // Only enable if env hints are present
   if (process.env.KV_REST_API_URL || process.env.VERCEL) {
     // eslint-disable-next-line global-require
@@ -20,7 +29,7 @@ try {
   if (!useKV && process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
     // eslint-disable-next-line global-require
     const { Redis } = require('@upstash/redis');
-    const redis = new Redis({ url: process.env.UPSTASH_REDIS_REST_URL, token: process.env.UPSTASH_REDIS_REST_TOKEN });
+    const redis = new Redis({ url: cleanEnv(process.env.UPSTASH_REDIS_REST_URL), token: cleanEnv(process.env.UPSTASH_REDIS_REST_TOKEN) });
     kv = {
       async get(key) { return redis.get(key); },
       async set(key, value) { return redis.set(key, value); },
