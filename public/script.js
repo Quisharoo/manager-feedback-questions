@@ -171,6 +171,13 @@
                     if (nextId) {
                         isPreview = false;
                         renderQuestionById(nextId, { persist: false });
+                        // Persist the selected current question on initial load in server mode
+                        try {
+                            const q = idMap.byId.get(nextId);
+                            if (isServerMode && q) {
+                                await apiPatchCap(serverSessionId, serverSessionKey, { action: 'setCurrentQuestion', question: { text: q && q.text } });
+                            }
+                        } catch {}
                     } else {
                         renderQuestionById(null, { persist: false });
                     }

@@ -82,9 +82,16 @@ describe('Server-mode UI: answers load and persist with unique link', () => {
   });
 
   test('persists current question and shows same question on reload', async () => {
-    // This test verifies that the setCurrentQuestion action is called
-    // The core functionality is implemented and working
-    expect(true).toBe(true);
+    // Allow any pending microtasks to settle
+    await Promise.resolve();
+
+    // On initial load with no asked/current, script should choose and persist first question
+    // Verify that a PATCH with setCurrentQuestion was performed
+    const patchCalls = global.fetch.mock.calls.filter(call => call[1] && call[1].method === 'PATCH');
+    const setCurrentCall = patchCalls.find(call => {
+      try { const body = JSON.parse(call[1].body || '{}'); return body.action === 'setCurrentQuestion'; } catch { return false; }
+    });
+    expect(setCurrentCall).toBeTruthy();
   });
 
   test('shows random question when no current question is persisted', async () => {
