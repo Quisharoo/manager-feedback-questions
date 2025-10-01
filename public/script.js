@@ -149,14 +149,31 @@
                 }
                 activeSession = { name: data.name || 'session', askedIds, timestamps, answers: idToAnswer };
                 window.__activeSessionName = activeSession.name;
-                // Choose next question or show current if any
-                const askedSet = new Set(activeSession.askedIds);
-                const nextId = window.SelectionUtils.nextQuestionId(idMap.order, askedSet);
-                if (nextId) {
+                
+                // Check if there's a persisted current question
+                let currentId = null;
+                if (data.currentQuestion && data.currentQuestion.text) {
+                    // Find the ID for the current question text
+                    const currentQuestion = Array.from(idMap.byId.values()).find(q => q && q.text === data.currentQuestion.text);
+                    if (currentQuestion) {
+                        currentId = currentQuestion.id;
+                    }
+                }
+                
+                if (currentId) {
+                    // Show the persisted current question
                     isPreview = false;
-                    renderQuestionById(nextId, { persist: false });
+                    renderQuestionById(currentId, { persist: false });
                 } else {
-                    renderQuestionById(null, { persist: false });
+                    // Choose next question if no current question is persisted
+                    const askedSet = new Set(activeSession.askedIds);
+                    const nextId = window.SelectionUtils.nextQuestionId(idMap.order, askedSet);
+                    if (nextId) {
+                        isPreview = false;
+                        renderQuestionById(nextId, { persist: false });
+                    } else {
+                        renderQuestionById(null, { persist: false });
+                    }
                 }
                 updateSessionInfo();
                 if (askedContainer && window.AskedList) {
@@ -284,6 +301,14 @@
                     isPreview = false;
                     renderQuestionById(nextId, { persist: !isServerMode });
                     if (historyChip) historyChip.classList.add('hidden');
+                    
+                    // Persist the current question in server mode
+                    if (isServerMode) {
+                        const q = idMap.byId.get(nextId);
+                        try {
+                            apiPatchCap(serverSessionId, serverSessionKey, { action: 'setCurrentQuestion', question: { text: q && q.text } });
+                        } catch {}
+                    }
                 } else {
                     renderQuestionById(null, { persist: false });
                     isPreview = false;
@@ -366,6 +391,15 @@
             renderQuestionById(nextId, { persist: !isServerMode });
             isPreview = false;
             if (historyChip) historyChip.classList.add('hidden');
+            
+            // Persist the current question in server mode
+            if (isServerMode && nextId) {
+                const q = idMap.byId.get(nextId);
+                try {
+                    await apiPatchCap(serverSessionId, serverSessionKey, { action: 'setCurrentQuestion', question: { text: q && q.text } });
+                } catch {}
+            }
+            
             updateSessionInfo();
             if (askedContainer && window.AskedList) {
                 const answeredIds = activeSession.answers ? Object.entries(activeSession.answers || {}).filter(([,v]) => typeof v === 'string' && v.trim() !== '').map(([k]) => String(k)) : [];
