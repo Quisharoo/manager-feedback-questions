@@ -149,14 +149,38 @@
                 }
                 activeSession = { name: data.name || 'session', askedIds, timestamps, answers: idToAnswer };
                 window.__activeSessionName = activeSession.name;
-                // Choose next question or show current if any
-                const askedSet = new Set(activeSession.askedIds);
-                const nextId = window.SelectionUtils.nextQuestionId(idMap.order, askedSet);
-                if (nextId) {
+                
+                // Check if there's a persisted current question
+                let currentId = null;
+                if (data.currentQuestion && data.currentQuestion.text) {
+                    // Find the ID for the current question text
+                    const currentQuestion = Array.from(idMap.byId.values()).find(q => q && q.text === data.currentQuestion.text);
+                    if (currentQuestion) {
+                        currentId = currentQuestion.id;
+                    }
+                }
+                
+                if (currentId) {
+                    // Show the persisted current question
                     isPreview = false;
-                    renderQuestionById(nextId, { persist: false });
+                    renderQuestionById(currentId, { persist: false });
                 } else {
-                    renderQuestionById(null, { persist: false });
+                    // Choose next question if no current question is persisted
+                    const askedSet = new Set(activeSession.askedIds);
+                    const nextId = window.SelectionUtils.nextQuestionId(idMap.order, askedSet);
+                    if (nextId) {
+                        isPreview = false;
+                        renderQuestionById(nextId, { persist: false });
+                        // Persist the selected current question on initial load in server mode
+                        try {
+                            const q = idMap.byId.get(nextId);
+                            if (isServerMode && q) {
+                                await apiPatchCap(serverSessionId, serverSessionKey, { action: 'setCurrentQuestion', question: { text: q && q.text } });
+                            }
+                        } catch {}
+                    } else {
+                        renderQuestionById(null, { persist: false });
+                    }
                 }
                 updateSessionInfo();
                 if (askedContainer && window.AskedList) {
@@ -284,6 +308,14 @@
                     isPreview = false;
                     renderQuestionById(nextId, { persist: !isServerMode });
                     if (historyChip) historyChip.classList.add('hidden');
+                    
+                    // Persist the current question in server mode
+                    if (isServerMode) {
+                        const q = idMap.byId.get(nextId);
+                        try {
+                            apiPatchCap(serverSessionId, serverSessionKey, { action: 'setCurrentQuestion', question: { text: q && q.text } });
+                        } catch {}
+                    }
                 } else {
                     renderQuestionById(null, { persist: false });
                     isPreview = false;
@@ -366,6 +398,15 @@
             renderQuestionById(nextId, { persist: !isServerMode });
             isPreview = false;
             if (historyChip) historyChip.classList.add('hidden');
+            
+            // Persist the current question in server mode
+            if (isServerMode && nextId) {
+                const q = idMap.byId.get(nextId);
+                try {
+                    await apiPatchCap(serverSessionId, serverSessionKey, { action: 'setCurrentQuestion', question: { text: q && q.text } });
+                } catch {}
+            }
+            
             updateSessionInfo();
             if (askedContainer && window.AskedList) {
                 const answeredIds = activeSession.answers ? Object.entries(activeSession.answers || {}).filter(([,v]) => typeof v === 'string' && v.trim() !== '').map(([k]) => String(k)) : [];
@@ -529,6 +570,8 @@
                 if (undoBtn) undoBtn.classList.add('hidden');
                 if (resetBtn) resetBtn.classList.add('hidden');
                 if (resultsBtn) resultsBtn.classList.add('hidden');
+                const adminFab = document.getElementById('adminCreateBtn');
+                if (adminFab) adminFab.classList.add('hidden');
                 if (questionCard) questionCard.classList.add('hidden');
             } catch {}
 
@@ -611,6 +654,10 @@
                 if (resetBtn) resetBtn.classList.remove('hidden');
                 ensureResultsButton();
                 if (resultsBtn) resultsBtn.classList.remove('hidden');
+                try {
+                    const key = sessionStorage.getItem('mfq_admin_key') || '';
+                    if (key) ensureAdminControls(key);
+                } catch {}
                 if (questionCard) questionCard.classList.remove('hidden');
             } catch {}
             const overlay = document.getElementById('sessionGateOverlay');
@@ -810,13 +857,34 @@
 
     function ensureAdminControls(adminKey) {
         if (!adminKey) return;
-        if (document.getElementById('adminCreateBtn')) return;
-        const btn = document.createElement('button');
-        btn.id = 'adminCreateBtn';
-        btn.className = 'fixed bottom-6 right-6 btn-primary text-white px-4 py-2 rounded-full shadow-lg';
-        btn.textContent = 'Create session';
-        btn.addEventListener('click', () => openCreateServerSessionDialog(adminKey));
-        document.body.appendChild(btn);
+        const overlay = document.getElementById('sessionGateOverlay');
+        if (overlay) {
+            if (!document.getElementById('adminCreateBtnOverlay')) {
+                const host = overlay.querySelector('#sessionGateHost');
+                const container = document.createElement('div');
+                container.className = 'mt-3 flex justify-end';
+                const btn = document.createElement('button');
+                btn.id = 'adminCreateBtnOverlay';
+                btn.className = 'btn-primary text-white px-3 py-1 rounded';
+                btn.textContent = 'Create server session';
+                btn.addEventListener('click', () => openCreateServerSessionDialog(adminKey));
+                container.appendChild(btn);
+                if (host && host.parentElement) host.parentElement.appendChild(container); else overlay.appendChild(container);
+            }
+            const floatBtn = document.getElementById('adminCreateBtn');
+            if (floatBtn) floatBtn.classList.add('hidden');
+            return;
+        }
+        let floatBtn = document.getElementById('adminCreateBtn');
+        if (!floatBtn) {
+            floatBtn = document.createElement('button');
+            floatBtn.id = 'adminCreateBtn';
+            floatBtn.className = 'fixed bottom-6 right-6 btn-primary text-white px-4 py-2 rounded-full shadow-lg';
+            floatBtn.textContent = 'Create session';
+            floatBtn.addEventListener('click', () => openCreateServerSessionDialog(adminKey));
+            document.body.appendChild(floatBtn);
+        }
+        floatBtn.classList.remove('hidden');
     }
 
     function openAdminDialog(opts) {
