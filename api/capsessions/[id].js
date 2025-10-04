@@ -101,11 +101,17 @@ module.exports = async (req, res) => {
           s.skipped = [];
           // Clear all saved answers on reset to match UI behavior
           s.answers = {};
+          s.currentQuestion = null;
           break;
         case 'setAnswer':
           s.answers = s.answers && typeof s.answers === 'object' ? s.answers : {};
           if (question && question.text) {
             s.answers[String(question.text)] = value;
+          }
+          break;
+        case 'setCurrentQuestion':
+          if (question && question.text) {
+            s.currentQuestion = question;
           }
           break;
         default:
