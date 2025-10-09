@@ -857,41 +857,37 @@
 
     function ensureAdminControls(adminKey) {
         if (!adminKey) return;
-        const overlay = document.getElementById('sessionGateOverlay');
-        if (overlay) {
-            if (!document.getElementById('adminCreateBtnOverlay')) {
-                const host = overlay.querySelector('#sessionGateHost');
-                const container = document.createElement('div');
-                container.className = 'mt-3 flex justify-end';
-                const btn = document.createElement('button');
-                btn.id = 'adminCreateBtnOverlay';
-                btn.className = 'btn-primary text-white px-3 py-1 rounded';
-                btn.textContent = 'Create server session';
-                btn.addEventListener('click', () => openCreateServerSessionDialog(adminKey));
-                container.appendChild(btn);
-                if (host && host.parentElement) host.parentElement.appendChild(container); else overlay.appendChild(container);
-            }
-            const floatBtn = document.getElementById('adminCreateBtn');
-            if (floatBtn) floatBtn.classList.add('hidden');
-            return;
-        }
         let floatBtn = document.getElementById('adminCreateBtn');
         if (!floatBtn) {
             floatBtn = document.createElement('button');
             floatBtn.id = 'adminCreateBtn';
             floatBtn.className = 'fixed bottom-6 right-6 btn-primary text-white px-4 py-2 rounded-full shadow-lg';
-            floatBtn.textContent = 'Create session';
-            floatBtn.addEventListener('click', () => openCreateServerSessionDialog(adminKey));
+            floatBtn.textContent = 'Create server session';
+            floatBtn.style.zIndex = '60';
+            floatBtn.addEventListener('click', () => {
+                if (!floatBtn._adminKey) return;
+                openCreateServerSessionDialog(floatBtn._adminKey);
+            });
             document.body.appendChild(floatBtn);
         }
+        floatBtn._adminKey = adminKey;
         floatBtn.classList.remove('hidden');
     }
 
     function openAdminDialog(opts) {
         opts = opts || {};
+        const existing = document.querySelector('[data-admin-dialog="true"]');
+        if (existing) {
+            const input = existing.querySelector('#adminKeyInput');
+            setTimeout(() => {
+                try { if (input) input.focus(); } catch {}
+            }, 0);
+            return;
+        }
         const preset = typeof opts.preset === 'string' ? opts.preset : '';
         const error = typeof opts.error === 'string' ? opts.error : '';
         const overlay = document.createElement('div');
+        overlay.setAttribute('data-admin-dialog', 'true');
         overlay.className = 'fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50';
         const dialog = document.createElement('div');
         dialog.className = 'bg-white rounded-lg p-4 w-full max-w-sm shadow-lg';
