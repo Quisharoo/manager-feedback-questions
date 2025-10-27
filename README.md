@@ -23,7 +23,7 @@ npm start
 Copy `.env.example` to `.env` for local development. Key variables:
 
 - `COOKIE_SECRET` – Signs cookies/keys (required in production)
-- `ADMIN_KEY` – Optional: restricts session creation to admin
+- `ADMIN_KEY` – Optional: restricts session creation to admin (must use `Authorization: Key <key>` header)
 - `KV_REST_API_URL`, `KV_REST_API_TOKEN` – Vercel KV storage
 - `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` – Upstash Redis storage
 

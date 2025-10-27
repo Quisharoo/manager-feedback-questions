@@ -32,6 +32,17 @@ function extractKey(req) {
 }
 
 /**
+ * Extract key only from Authorization header (used for admin auth)
+ * @param {Object} req - Request object
+ * @returns {string} Extracted key or empty string
+ */
+function extractHeaderKey(req) {
+  const auth = req.headers && req.headers.authorization;
+  const m = auth && auth.match(/^Key\s+(.+)$/i);
+  return (m && m[1] ? m[1] : '').trim();
+}
+
+/**
  * Check if request includes valid admin key
  * @param {Object} req - Request object
  * @returns {boolean} True if admin key is valid
@@ -39,7 +50,8 @@ function extractKey(req) {
 function isAdmin(req) {
   const ADMIN_KEY = process.env.ADMIN_KEY || '';
   if (!ADMIN_KEY) return false;
-  const k = extractKey(req);
+  const k = extractHeaderKey(req);
+  if (!k) return false;
   try {
     const a = Buffer.from(hashKey(k));
     const b = Buffer.from(hashKey(ADMIN_KEY));
