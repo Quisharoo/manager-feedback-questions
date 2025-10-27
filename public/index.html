@@ -8,54 +8,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
-        
-        body {
-            font-family: 'Poppins', sans-serif;
-            background-color: #f8fafc;
-        }
-        
-        .question-card {
-            /* Allow the card to grow so controls push down on larger screens */
-            min-height: 320px;
-            display: flex;
-            flex-direction: column;
-            transition: all 0.3s ease;
-        }
-        /* Allow long content to scroll on small screens; show fully on desktop */
-        #question-container { flex: 1; overflow-y: auto; }
-        @media (min-width: 768px) {
-            .question-card { min-height: 480px; }
-            #question-container { overflow-y: visible; }
-        }
-        
-        .btn-primary {
-            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-            transition: all 0.3s ease;
-        }
-        
-        .btn-primary:hover {
-            /* Avoid overriding Tailwind transform used for centering (-translate-x-1/2) */
-            box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.3);
-        }
-        
-        .pulse {
-            animation: pulse 2s infinite;
-        }
-        
-        @keyframes pulse {
-            0% {
-                transform: scale(1);
-            }
-            50% {
-                transform: scale(1.05);
-            }
-            100% {
-                transform: scale(1);
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="/style.css">
 </head>
 <body class="min-h-screen flex flex-col items-center justify-center p-4">
     <div class="w-full max-w-5xl mx-auto">
@@ -107,9 +60,7 @@
         </div>
     </div>
     
-    <footer class="mt-12 text-center text-gray-500 text-sm">
-        <p>Made with <i class="fas fa-heart text-red-500"></i> for meaningful conversations</p>
-    </footer>
+
 
     <script src="sessionStore.js"></script>
     <script src="selectionUtils.js"></script>

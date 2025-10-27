@@ -1,15 +1,4 @@
----
-title: manager-feedback-questions
-emoji: 🐳
-colorFrom: gray
-colorTo: blue
-sdk: static
-pinned: false
-tags:
-  - deepsite
----
-
-A lightweight tool to guide better 1:1s and track which questions you’ve already covered.
+A lightweight tool to guide better 1:1s and track which questions you've already covered.
 
 ## Quick start
 
@@ -19,46 +8,53 @@ npm start
 # open http://localhost:3000
 ```
 
-## How it works (user guide)
-- Start a session, give it a name (e.g., "Weekly 1:1 – Alex").
-- Next shows a question; Undo goes back; Reset clears progress for that session.
-- Export your asked list as Copy/Markdown/CSV if you want a portable record.
+## How it works
+- Start a session, give it a name (e.g., "Weekly 1:1 – Alex")
+- Next shows a question; add notes, then mark asked or skip
+- Export your asked list as Markdown/CSV for records
+- Create shareable links for remote storage and multi-device access
 
-## Where your data lives
-- Production (Vercel): Your session progress is stored in a small, signed, HttpOnly cookie on your device. The cookie contains only question IDs (not full text) and lasts up to 1 year.
-- Local dev (Express server): Sessions are saved to `data/sessions.json` on disk.
+## Storage options
+- **Local mode**: Sessions stored in browser localStorage (default)
+- **Server mode**: Shareable sessions with capability-based URLs (edit/view keys)
+- **Production**: Supports Vercel KV or Upstash Redis for serverless deployments
 
-Cross‑device sync is not automatic. To move data between devices or browsers, use the export features.
+## Environment variables
+Copy `.env.example` to `.env` for local development. Key variables:
 
-## What can clear your data
-- Clearing site data/cookies in your browser
-- Private/incognito windows (deleted on close)
-- Switching devices/browsers (no shared cookie)
-- Local dev only: deleting `data/sessions.json`
+- `COOKIE_SECRET` – Signs cookies/keys (required in production)
+- `ADMIN_KEY` – Optional: restricts session creation to admin (must use `Authorization: Key <key>` header)
+- `KV_REST_API_URL`, `KV_REST_API_TOKEN` – Vercel KV storage
+- `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` – Upstash Redis storage
 
-## Security
-- Cookies are HMAC‑signed (`COOKIE_SECRET`) to prevent tampering, `HttpOnly`, `SameSite=Lax`, and `Secure` in production.
-- Set `COOKIE_SECRET` in your deploy environment for proper signing. On Vercel: Project → Settings → Environment Variables → `COOKIE_SECRET`.
+## API endpoints
+**Regular sessions** (optional admin key):
+- POST `/api/sessions` → create
+- GET/PATCH `/api/sessions/:id`
 
-## Minimal API
-- POST `/api/sessions` → create session → returns `{ id, name, asked: [], skipped: [] }`
-- GET `/api/sessions/:id` → returns session state
-- PATCH `/api/sessions/:id` with `{ action, question? }` where `action ∈ { markAsked, markSkipped, undoAsked, undoSkipped, reset }`
+**Capability sessions** (always key-gated):
+- POST `/api/capsessions` → create with shareable links
+- GET/PATCH `/api/capsessions/:id?key=...`
 
-## Project layout (essentials)
+Actions: `markAsked`, `markSkipped`, `undoAsked`, `undoSkipped`, `reset`, `setAnswer`, `setCurrentQuestion`
+
+## Project structure
 ```
 .
-├── public/                 # UI (HTML/CSS/JS)
-├── api/                    # Serverless handlers (cookie‑backed, signed)
-│   ├── _utils.js           # parse, cookie sign/verify, logging
-│   └── sessions/
-│       ├── index.js        # POST /api/sessions
-│       └── [id].js         # GET/PATCH /api/sessions/:id
-├── server.js               # Local Express server (serves static + file‑backed API)
-└── server/sessionStore.js  # File store with per‑session atomic updates
+├── public/           # Vanilla JS frontend
+├── api/              # Serverless API handlers
+│   ├── _crypto.js    # Shared crypto utilities
+│   ├── _store.js     # Storage abstraction (KV/file)
+│   ├── _utils.js     # Cookie signing, parsing
+│   ├── sessions/     # Regular session endpoints
+│   ├── capsessions/  # Capability session endpoints
+│   └── admin/        # Admin endpoints
+├── server.js         # Express dev server
+└── server/           # File-based storage for local dev
 ```
 
-## Development notes
-- In production, the serverless API stores only IDs in cookies and expands them to full questions at read time.
-- The Express store serializes updates per session to avoid lost writes during concurrent requests.
-- Run tests with `npm test`.
+## Development
+```bash
+npm test              # Run test suite
+npm start             # Start dev server on :3000
+```

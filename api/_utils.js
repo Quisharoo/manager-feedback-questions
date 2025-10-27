@@ -8,7 +8,8 @@ function parseBody(req) {
     req.on('end', () => {
       try {
         resolve(JSON.parse(data || '{}'));
-      } catch {
+      } catch (e) {
+        console.error('[api] parseBody: Invalid JSON, returning empty object', e.message);
         resolve({});
       }
     });

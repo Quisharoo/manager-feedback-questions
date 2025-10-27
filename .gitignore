@@ -11,6 +11,7 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+.claude/settings.local.json
 
 # Env files (keep example)
 .env
