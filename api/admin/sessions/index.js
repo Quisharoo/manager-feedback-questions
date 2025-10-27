@@ -1,24 +1,6 @@
-const crypto = require('crypto');
 const { parseBody, logRequest } = require('../../../api/_utils');
 const store = require('../../../api/_store');
-
-const ADMIN_KEY = process.env.ADMIN_KEY || '';
-const COOKIE_SECRET = process.env.COOKIE_SECRET || 'dev-secret';
-function hashKey(key) { return crypto.createHmac('sha256', COOKIE_SECRET).update(String(key || '')) .digest('base64'); }
-function extractKey(req) {
-  const auth = req.headers && req.headers.authorization;
-  const m = auth && auth.match(/^Key\s+(.+)$/i);
-  return ((m && m[1]) || '').trim();
-}
-function isAdmin(req) {
-  if (!ADMIN_KEY) return false;
-  const k = extractKey(req);
-  try {
-    const a = Buffer.from(hashKey(k));
-    const b = Buffer.from(hashKey(ADMIN_KEY));
-    return a.length === b.length && crypto.timingSafeEqual(a, b);
-  } catch { return false; }
-}
+const { genKey, hashKey, isAdmin, ADMIN_KEY } = require('../../../api/_crypto');
 
 module.exports = async (req, res) => {
   logRequest(req);
@@ -45,10 +27,9 @@ module.exports = async (req, res) => {
       res.setHeader('Content-Type', 'application/json');
       return res.end(JSON.stringify({ error: 'Invalid name' }));
     }
-    const { randomBytes } = require('crypto');
-    const editKey = randomBytes(24).toString('base64url');
+    const editKey = genKey(192);
     const editKeyHash = hashKey(editKey);
-    const viewKey = randomBytes(20).toString('base64url');
+    const viewKey = genKey(160);
     const viewKeyHash = hashKey(viewKey);
     const session = await store.createSession(name, { editKeyHash, viewKeyHash, createdAt: Date.now(), lastAccess: Date.now(), answers: {} });
     const host = (req.headers && req.headers.host) || '';

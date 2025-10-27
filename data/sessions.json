@@ -1,16 +1,23 @@
 {
   "sessions": {
-    "ed293e1d-aee1-4b67-9aa0-19395ddd16b8": {
-      "id": "ed293e1d-aee1-4b67-9aa0-19395ddd16b8",
+    "681a93c3-63ce-4ee4-b631-317a7e24b0a6": {
+      "id": "681a93c3-63ce-4ee4-b631-317a7e24b0a6",
       "name": "Cap A",
       "asked": [],
       "skipped": [],
-      "editKeyHash": "9fntPaDNBxCmlX66q1IjFj71GsYuRB77ozotuOTACpU=",
-      "viewKeyHash": "NDQmObmZ0IKsGiDBms470R9w15z9m0T8CV4FdoZgtlU=",
-      "createdAt": 1758283707707,
-      "lastAccess": 1758283707736,
+      "editKeyHash": "7ULawaUBq2nwTweqq2CTgFBfTVO8h4w8LRz4g0KsSEQ=",
+      "viewKeyHash": "lnLv/88stGvftlkVPSg8Z0+c+fmu3VN71L5mUARUFA0=",
+      "createdAt": 1761576845140,
+      "lastAccess": 1761576845147,
       "cap": true,
-      "answers": {}
+      "answers": {},
+      "currentQuestion": null
+    },
+    "0c949438-429e-4057-829e-ebd0a24515cc": {
+      "id": "0c949438-429e-4057-829e-ebd0a24515cc",
+      "name": "Legacy",
+      "asked": [],
+      "skipped": []
     }
   }
 }

@@ -61,7 +61,6 @@
         let isAdvancing = false;
         let resetUndoTimer = null;
 
-        // --- Server capability mode detection ---
         function getUrlParams() {
             try {
                 const u = new URL(window.location.href);
@@ -137,10 +136,8 @@
             try {
                 const data = await apiGetCapSession(serverSessionId, serverSessionKey);
                 const askedIds = mapAskedToIds(data.asked || []);
-                // Synthesize timestamps for display (approximate ordering)
                 const base = Date.now();
                 const timestamps = askedIds.map((_, i) => base - (askedIds.length - 1 - i) * 1000);
-                // Map server answers keyed by question text to local IDs
                 const answers = (data && data.answers && typeof data.answers === 'object') ? data.answers : {};
                 const idToAnswer = {};
                 for (const [text, value] of Object.entries(answers)) {
@@ -149,29 +146,24 @@
                 }
                 activeSession = { name: data.name || 'session', askedIds, timestamps, answers: idToAnswer };
                 window.__activeSessionName = activeSession.name;
-                
-                // Check if there's a persisted current question
+
                 let currentId = null;
                 if (data.currentQuestion && data.currentQuestion.text) {
-                    // Find the ID for the current question text
                     const currentQuestion = Array.from(idMap.byId.values()).find(q => q && q.text === data.currentQuestion.text);
                     if (currentQuestion) {
                         currentId = currentQuestion.id;
                     }
                 }
-                
+
                 if (currentId) {
-                    // Show the persisted current question
                     isPreview = false;
                     renderQuestionById(currentId, { persist: false });
                 } else {
-                    // Choose next question if no current question is persisted
                     const askedSet = new Set(activeSession.askedIds);
                     const nextId = window.SelectionUtils.nextQuestionId(idMap.order, askedSet);
                     if (nextId) {
                         isPreview = false;
                         renderQuestionById(nextId, { persist: false });
-                        // Persist the selected current question on initial load in server mode
                         try {
                             const q = idMap.byId.get(nextId);
                             if (isServerMode && q) {
@@ -234,16 +226,13 @@
                 activeSession = window.SessionStore.open(activeSession.name);
             }
 
-            // Wire up answer editor
             try {
                 const textarea = document.getElementById('answerText');
                 const initial = (function() {
-                    // In server mode, prefer server-loaded answers map
                     if (isServerMode && activeSession && activeSession.answers && typeof activeSession.answers === 'object') {
                         const v = activeSession.answers[String(id)];
                         return typeof v === 'string' ? v : '';
                     }
-                    // Local mode falls back to SessionStore
                     return (activeSession && window.SessionStore && typeof window.SessionStore.getAnswer === 'function') ? window.SessionStore.getAnswer(activeSession.name, id) : '';
                 })();
                 textarea.value = initial;
@@ -290,7 +279,6 @@
         function onOpenSession(name) {
             if (!name) return;
             if (isServerMode) {
-                // In server mode, ignore local SessionStore for opening
                 activeSession = activeSession && activeSession.name ? activeSession : { name, askedIds: [], timestamps: [] };
                 window.__activeSessionName = name;
             } else {
@@ -301,15 +289,13 @@
                 renderQuestionById(activeSession.currentId, { persist: false });
                 isPreview = false;
             } else {
-                // Choose first question and immediately set it as current (no preview)
                 const askedSet = new Set(activeSession.askedIds);
                 const nextId = window.SelectionUtils.nextQuestionId(idMap.order, askedSet);
                 if (nextId) {
                     isPreview = false;
                     renderQuestionById(nextId, { persist: !isServerMode });
                     if (historyChip) historyChip.classList.add('hidden');
-                    
-                    // Persist the current question in server mode
+
                     if (isServerMode) {
                         const q = idMap.byId.get(nextId);
                         try {

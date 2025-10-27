@@ -87,17 +87,17 @@ describe('Integration: new session, Next x3, Undo x1, Reset', () => {
     const askedContainer = document.getElementById('asked-container');
     const copyBtn = askedContainer.querySelector('button[aria-label="Copy asked list"]');
     copyBtn.click();
-    // Export
+    // Export button should render and be clickable
     const exportBtn = Array.from(askedContainer.querySelectorAll('button')).find(b => b.textContent.trim() === 'Export');
-    const BlobOrig = global.Blob;
-    const spy = jest.fn((parts, opts) => new BlobOrig(parts, opts));
-    global.Blob = spy;
-    try {
-      exportBtn.click();
-      expect(spy).toHaveBeenCalled();
-    } finally {
-      global.Blob = BlobOrig;
-    }
+    expect(exportBtn).toBeTruthy();
+    exportBtn.click();
+    // Export dialog should appear
+    const dialog = document.querySelector('[role="dialog"]');
+    expect(dialog).toBeTruthy();
+    expect(dialog.textContent).toContain('Export asked list');
+    // Cleanup
+    const overlay = document.querySelector('.fixed.inset-0');
+    if (overlay) overlay.remove();
   });
 
   test('answer editor persists per question and warns on delete', () => {

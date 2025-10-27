@@ -1,7 +1,7 @@
 const express = require('express');
 const path = require('path');
-const crypto = require('crypto');
 const { createSession, getSession, saveSession, updateSession } = require('./server/sessionStore');
+const { genKey, hashKey, extractKey, isAdmin, keyAllowsRead, capKeyAllowsRead, keyAllowsWrite, ADMIN_KEY } = require('./api/_crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -12,49 +12,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
-
-// --- Capability key helpers ---
-const ADMIN_KEY = process.env.ADMIN_KEY || '';
-const HMAC_SECRET = process.env.COOKIE_SECRET || 'dev-secret';
-function genKey(bits = 192) { return crypto.randomBytes(bits / 8).toString('base64url'); }
-function hashKey(key) { return crypto.createHmac('sha256', HMAC_SECRET).update(String(key || '')) .digest('base64'); }
-function extractKey(req) {
-  const q = req.query && req.query.key;
-  const auth = req.headers && req.headers.authorization;
-  const m = auth && auth.match(/^Key\s+(.+)$/i);
-  return (q || (m && m[1]) || '').trim();
-}
-function isAdmin(req) {
-  if (!ADMIN_KEY) return false;
-  const k = extractKey(req);
-  try {
-    const a = Buffer.from(hashKey(k));
-    const b = Buffer.from(hashKey(ADMIN_KEY));
-    return a.length === b.length && crypto.timingSafeEqual(a, b);
-  } catch { return false; }
-}
-function keyAllowsRead(session, key) {
-  // If no keys on session, open access (legacy behavior)
-  if (!session || (!session.editKeyHash)) return true;
-  if (!key) return false;
-  try {
-    const provided = Buffer.from(hashKey(key));
-    const editHash = Buffer.from(String(session.editKeyHash || ''));
-    const viewHash = Buffer.from(String(session.viewKeyHash || ''));
-    const matchesEdit = (provided.length === editHash.length) && crypto.timingSafeEqual(provided, editHash);
-    const matchesView = (viewHash.length > 0) && (provided.length === viewHash.length) && crypto.timingSafeEqual(provided, viewHash);
-    return matchesEdit || matchesView;
-  } catch { return false; }
-}
-function keyAllowsWrite(session, key) {
-  if (!session || (!session.editKeyHash)) return false;
-  if (!key) return false;
-  try {
-    const provided = Buffer.from(hashKey(key));
-    const editHash = Buffer.from(String(session.editKeyHash || ''));
-    return provided.length === editHash.length && crypto.timingSafeEqual(provided, editHash);
-  } catch { return false; }
-}
 
 // --- API ---
 app.post('/api/sessions', (req, res) => {
@@ -89,7 +46,9 @@ app.get('/api/sessions/:id', (req, res) => {
     try {
       session.lastAccess = Date.now();
       saveSession(session);
-    } catch {}
+    } catch (e) {
+      // Intentionally silent: lastAccess is best-effort, non-critical
+    }
   }
   res.json(session);
 });
@@ -179,8 +138,13 @@ app.get('/api/capsessions/:id', (req, res) => {
   const session = getSession(req.params.id);
   if (!session) return res.status(404).json({ error: 'Not found' });
   const k = extractKey(req);
-  if (!keyAllowsRead(session, k)) return res.status(403).json({ error: 'Forbidden' });
-  try { session.lastAccess = Date.now(); saveSession(session); } catch {}
+  if (!capKeyAllowsRead(session, k)) return res.status(403).json({ error: 'Forbidden' });
+  try {
+    session.lastAccess = Date.now();
+    saveSession(session);
+  } catch (e) {
+    // Intentionally silent: lastAccess is best-effort, non-critical
+  }
   res.json(session);
 });
 
