@@ -1,38 +1,6 @@
-const crypto = require('crypto');
 const { parseBody, logRequest } = require('../../api/_utils');
 const store = require('../../api/_store');
-
-const COOKIE_SECRET = process.env.COOKIE_SECRET || 'dev-secret';
-function hashKey(key) { return crypto.createHmac('sha256', COOKIE_SECRET).update(String(key || '')) .digest('base64'); }
-
-function extractKey(req) {
-  const q = (req.query && req.query.key) || undefined;
-  const auth = req.headers && req.headers.authorization;
-  const m = auth && auth.match(/^Key\s+(.+)$/i);
-  return q || (m && m[1]) || '';
-}
-
-function keyAllowsRead(session, key) {
-  if (!session || !session.editKeyHash) return false;
-  if (!key) return false;
-  try {
-    const provided = Buffer.from(hashKey(key));
-    const editHash = Buffer.from(String(session.editKeyHash || ''));
-    const viewHash = Buffer.from(String(session.viewKeyHash || ''));
-    const matchesEdit = (provided.length === editHash.length) && crypto.timingSafeEqual(provided, editHash);
-    const matchesView = (viewHash.length > 0) && (provided.length === viewHash.length) && crypto.timingSafeEqual(provided, viewHash);
-    return matchesEdit || matchesView;
-  } catch { return false; }
-}
-function keyAllowsWrite(session, key) {
-  if (!session || !session.editKeyHash) return false;
-  if (!key) return false;
-  try {
-    const provided = Buffer.from(hashKey(key));
-    const editHash = Buffer.from(String(session.editKeyHash || ''));
-    return provided.length === editHash.length && crypto.timingSafeEqual(provided, editHash);
-  } catch { return false; }
-}
+const { extractKey, capKeyAllowsRead, keyAllowsWrite } = require('../../api/_crypto');
 
 module.exports = async (req, res) => {
   logRequest(req);
@@ -48,7 +16,7 @@ module.exports = async (req, res) => {
     return res.end(JSON.stringify({ error: 'Not found' }));
   }
   const key = extractKey(req);
-  if (!keyAllowsRead(session, key)) {
+  if (!capKeyAllowsRead(session, key)) {
     res.statusCode = 403;
     res.setHeader('Content-Type', 'application/json');
     return res.end(JSON.stringify({ error: 'Forbidden' }));

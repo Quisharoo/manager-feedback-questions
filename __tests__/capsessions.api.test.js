@@ -111,6 +111,20 @@ describe('serverless /api/capsessions', () => {
     expect(Array.isArray(afterReset.asked) && afterReset.asked.length).toBe(0);
     expect(afterReset.answers && Object.keys(afterReset.answers).length).toBe(0);
   });
+
+  test('GET returns 403 for session missing editKeyHash (security)', async () => {
+    // Simulate a corrupted/legacy session missing editKeyHash
+    const store = require('../api/_store');
+    const sessionWithoutHash = await store.createSession('Legacy', {});
+    expect(sessionWithoutHash.editKeyHash).toBeUndefined();
+
+    // Attempt to access without key should return 403, not 200
+    const getReq = makeReq({ method: 'GET', url: `/api/capsessions/${sessionWithoutHash.id}`, query: { id: sessionWithoutHash.id } });
+    const getRes = makeRes();
+    await idHandler(getReq, getRes);
+    await getRes.done;
+    expect(getRes.statusCode).toBe(403);
+  });
 });
 
 

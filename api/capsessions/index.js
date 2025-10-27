@@ -1,25 +1,6 @@
-const crypto = require('crypto');
 const { parseBody, logRequest } = require('../../api/_utils');
 const store = require('../../api/_store');
-
-const ADMIN_KEY = process.env.ADMIN_KEY || '';
-const COOKIE_SECRET = process.env.COOKIE_SECRET || 'dev-secret';
-function hashKey(key) { return crypto.createHmac('sha256', COOKIE_SECRET).update(String(key || '')) .digest('base64'); }
-function genKey(bits = 192) { return crypto.randomBytes(bits / 8).toString('base64url'); }
-function extractKey(req) {
-  const auth = req.headers && req.headers.authorization;
-  const m = auth && auth.match(/^Key\s+(.+)$/i);
-  return ((m && m[1]) || '').trim();
-}
-function isAdmin(req) {
-  if (!ADMIN_KEY) return false;
-  const k = extractKey(req);
-  try {
-    const a = Buffer.from(hashKey(k));
-    const b = Buffer.from(hashKey(ADMIN_KEY));
-    return a.length === b.length && crypto.timingSafeEqual(a, b);
-  } catch { return false; }
-}
+const { genKey, hashKey, isAdmin, ADMIN_KEY } = require('../../api/_crypto');
 
 module.exports = async (req, res) => {
   logRequest(req);

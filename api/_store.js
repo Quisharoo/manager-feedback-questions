@@ -47,7 +47,10 @@ if (!useKV) {
 async function kvGet(key) {
   const val = await kv.get(key);
   if (!val) return null;
-  try { return typeof val === 'string' ? JSON.parse(val) : val; } catch { return null; }
+  try { return typeof val === 'string' ? JSON.parse(val) : val; } catch (e) {
+    console.error('[store] kvGet: Failed to parse value for key', key, e.message);
+    return null;
+  }
 }
 
 async function kvSet(key, obj) {
@@ -60,7 +63,12 @@ async function kvList(prefix) {
   const idxKey = `${prefix}:index`;
   const ids = await kv.get(idxKey);
   let list = [];
-  try { list = Array.isArray(ids) ? ids : JSON.parse(ids || '[]'); } catch { list = []; }
+  try {
+    list = Array.isArray(ids) ? ids : JSON.parse(ids || '[]');
+  } catch (e) {
+    console.error('[store] kvList: Failed to parse index', idxKey, e.message);
+    list = [];
+  }
   const out = [];
   for (const id of list) {
     const s = await kvGet(`${prefix}:${id}`);
@@ -72,7 +80,12 @@ async function kvList(prefix) {
 async function kvUpsertIndex(prefix, id) {
   const idxKey = `${prefix}:index`;
   let arr = await kv.get(idxKey);
-  try { arr = Array.isArray(arr) ? arr : JSON.parse(arr || '[]'); } catch { arr = []; }
+  try {
+    arr = Array.isArray(arr) ? arr : JSON.parse(arr || '[]');
+  } catch (e) {
+    console.error('[store] kvUpsertIndex: Failed to parse index, creating new', idxKey, e.message);
+    arr = [];
+  }
   const set = new Set(arr);
   set.add(id);
   const next = JSON.stringify(Array.from(set));
