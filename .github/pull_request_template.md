@@ -1,20 +1,17 @@
-## What changed
+## Description
+<!-- Brief description of what this PR does -->
 
-## How to run
-- npm install
-- npm start
-- open http://localhost:3000
+## Changes
+<!-- List the main changes in this PR -->
 
-## Tests
-- Added/updated:
-- Jest result:
+## Testing
+<!-- Describe how you tested these changes -->
+- [ ] Tests pass locally (`npm test`)
+- [ ] Manual testing completed
 
-## UI/Functional verification
-- Steps:
-- Expected:
-
-## Commit message (Conventional Commits)
-
-## Follow-ups
+## Checklist
+- [ ] Code follows existing style and patterns
+- [ ] Tests added/updated for changed behavior
+- [ ] No breaking changes (or documented if necessary)
 
 

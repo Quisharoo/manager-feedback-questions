@@ -11,7 +11,12 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
-.claude/settings.local.json
+
+# AI assistant files
+.claude/
+.cursor/
+.aider*
+AGENTS.md
 
 # Env files (keep example)
 .env
