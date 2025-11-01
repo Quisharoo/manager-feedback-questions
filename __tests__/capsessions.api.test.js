@@ -79,8 +79,28 @@ describe('serverless /api/capsessions', () => {
     await getRes.done;
     expect(getRes.statusCode).toBe(200);
 
+    const q = { id: 'q1', text: 'Hello world?', theme: 'Work Style' };
+
+    // Persist current question
+    const setReq = makeReq({ method: 'PATCH', url: `/api/capsessions/${id}?key=${key}`, headers: { 'content-type': 'application/json' }, body: { action: 'setCurrentQuestion', question: q }, query: { id, key } });
+    const setRes = makeRes();
+    await idHandler(setReq, setRes);
+    await setRes.done;
+    expect(setRes.statusCode).toBe(200);
+    const setBody = parseJson(setRes);
+    expect(setBody.currentQuestion && setBody.currentQuestion.text).toBe(q.text);
+    expect(setBody.currentQuestionId).toBe(q.id);
+
+    // GET again to confirm current question persisted
+    const getCurReq = makeReq({ method: 'GET', url: `/api/capsessions/${id}?key=${key}`, query: { id, key } });
+    const getCurRes = makeRes();
+    await idHandler(getCurReq, getCurRes);
+    await getCurRes.done;
+    const curBody = parseJson(getCurRes);
+    expect(curBody.currentQuestion && curBody.currentQuestion.text).toBe(q.text);
+    expect(curBody.currentQuestionId).toBe(q.id);
+
     // PATCH markAsked with key
-    const q = { text: 'Hello world?' };
     const patchReq = makeReq({ method: 'PATCH', url: `/api/capsessions/${id}?key=${key}`, headers: { 'content-type': 'application/json' }, body: { action: 'markAsked', question: q }, query: { id, key } });
     const patchRes = makeRes();
     await idHandler(patchReq, patchRes);
@@ -113,6 +133,8 @@ describe('serverless /api/capsessions', () => {
     const afterReset = parseJson(resetRes);
     expect(Array.isArray(afterReset.asked) && afterReset.asked.length).toBe(0);
     expect(afterReset.answers && Object.keys(afterReset.answers).length).toBe(0);
+    expect(afterReset.currentQuestion).toBeNull();
+    expect(afterReset.currentQuestionId).toBeNull();
   });
 
   test('GET returns 403 for session missing editKeyHash (security)', async () => {
@@ -129,5 +151,4 @@ describe('serverless /api/capsessions', () => {
     expect(getRes.statusCode).toBe(403);
   });
 });
-
 

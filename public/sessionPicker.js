@@ -75,10 +75,20 @@
                                 });
                                 if (res.ok) {
                                         const json = await res.json();
-                                        if (json && json.url) {
+                                        const links = json && json.links;
+                                        if (links && typeof links.edit === 'string' && links.edit) {
+                                                if (typeof window.openShareLinksDialog === 'function') {
+                                                        try { window.openShareLinksDialog(links); } catch (err) { console.error('share dialog failed', err); }
+                                                }
+                                                window.location.href = links.edit;
+                                                return;
+                                        }
+                                        if (json && typeof json.url === 'string' && json.url) {
                                                 window.location.href = json.url;
                                                 return;
                                         }
+                                        // Unexpected success payload; treat as failure to avoid silent misbehaviour
+                                        alert('Failed to create session on server: unexpected response. Creating local session instead.');
                                 } else {
                                         // Show error message to user
                                         const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
@@ -515,6 +525,3 @@
         if (typeof module !== 'undefined') module.exports = SessionPicker;
         if (typeof window !== 'undefined') window.SessionPicker = SessionPicker;
 })();
-
-
-

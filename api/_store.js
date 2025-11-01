@@ -33,6 +33,10 @@ try {
     kv = {
       async get(key) { return redis.get(key); },
       async set(key, value) { return redis.set(key, value); },
+      async del(key) { return redis.del(key); },
+      async sadd(key, member) { return redis.sadd(key, member); },
+      async srem(key, member) { return redis.srem(key, member); },
+      async smembers(key) { return redis.smembers(key); },
     };
     useKV = true;
   }
@@ -181,5 +185,4 @@ async function deleteSession(id) {
 }
 
 module.exports = { createSession, getSession, saveSession, updateSession, listSessions, deleteSession };
-
 

@@ -79,6 +79,41 @@
         const isServerMode = !!(serverSessionId && serverSessionKey);
         if (isServerMode && params.key) persistKey(serverSessionId, serverSessionKey);
 
+        function persistCurrentQuestion(id) {
+            if (activeSession) {
+                activeSession.currentId = id ? String(id) : null;
+            }
+            if (!isServerMode) return;
+            const storageKey = `mfq_current_${serverSessionId}`;
+            try {
+                if (id) {
+                    sessionStorage.setItem(storageKey, String(id));
+                } else {
+                    sessionStorage.removeItem(storageKey);
+                }
+            } catch {}
+        }
+
+        function readPersistedCurrent() {
+            if (!isServerMode) return null;
+            const storageKey = `mfq_current_${serverSessionId}`;
+            try {
+                const stored = sessionStorage.getItem(storageKey);
+                return stored && stored.trim() ? stored : null;
+            } catch {
+                return null;
+            }
+        }
+
+        function questionPayloadById(id) {
+            if (!id) return null;
+            const q = idMap.byId.get(id);
+            if (!q) return null;
+            const payload = { id: String(id), text: q.text };
+            if (q.theme) payload.theme = q.theme;
+            return payload;
+        }
+
         function ensureResultsButton() {
             if (!isServerMode) return;
             if (resultsBtn) return;
@@ -144,34 +179,45 @@
                     const entry = Array.from(idMap.byId.values()).find(q => q && q.text === text);
                     if (entry && typeof value === 'string' && value.trim() !== '') idToAnswer[String(entry.id)] = value;
                 }
-                activeSession = { name: data.name || 'session', askedIds, timestamps, answers: idToAnswer };
-                window.__activeSessionName = activeSession.name;
-
                 let currentId = null;
-                if (data.currentQuestion && data.currentQuestion.text) {
+                if (data.currentQuestionId && idMap.byId.has(String(data.currentQuestionId))) {
+                    currentId = String(data.currentQuestionId);
+                } else if (data.currentQuestion && data.currentQuestion.text) {
                     const currentQuestion = Array.from(idMap.byId.values()).find(q => q && q.text === data.currentQuestion.text);
                     if (currentQuestion) {
                         currentId = currentQuestion.id;
                     }
                 }
+                if (!currentId) {
+                    const storedId = readPersistedCurrent();
+                    if (storedId && idMap.byId.has(storedId)) {
+                        currentId = storedId;
+                    }
+                }
+
+                activeSession = { name: data.name || 'session', askedIds, timestamps, answers: idToAnswer, currentId: currentId || null };
+                window.__activeSessionName = activeSession.name;
 
                 if (currentId) {
                     isPreview = false;
                     renderQuestionById(currentId, { persist: false });
+                    persistCurrentQuestion(currentId);
                 } else {
                     const askedSet = new Set(activeSession.askedIds);
                     const nextId = window.SelectionUtils.nextQuestionId(idMap.order, askedSet);
                     if (nextId) {
                         isPreview = false;
                         renderQuestionById(nextId, { persist: false });
+                        persistCurrentQuestion(nextId);
                         try {
-                            const q = idMap.byId.get(nextId);
-                            if (isServerMode && q) {
-                                await apiPatchCap(serverSessionId, serverSessionKey, { action: 'setCurrentQuestion', question: { text: q && q.text } });
+                            const payload = questionPayloadById(nextId);
+                            if (isServerMode && payload) {
+                                await apiPatchCap(serverSessionId, serverSessionKey, { action: 'setCurrentQuestion', question: payload });
                             }
                         } catch {}
                     } else {
                         renderQuestionById(null, { persist: false });
+                        persistCurrentQuestion(null);
                     }
                 }
                 updateSessionInfo();
@@ -241,8 +287,9 @@
                     const val = textarea.value || '';
                     if (isServerMode) {
                         try {
-                            const q = idMap.byId.get(id);
-                            await apiPatchCap(serverSessionId, serverSessionKey, { action: 'setAnswer', question: { text: q && q.text }, value: val });
+                            const payload = questionPayloadById(id);
+                            const body = { action: 'setAnswer', question: payload || { text: id && question ? question.text : '' }, value: val };
+                            await apiPatchCap(serverSessionId, serverSessionKey, body);
                             if (!activeSession.answers || typeof activeSession.answers !== 'object') activeSession.answers = {};
                             activeSession.answers[String(id)] = val;
                             if (askedContainer && window.AskedList) {
@@ -288,23 +335,26 @@
             if (activeSession.currentId) {
                 renderQuestionById(activeSession.currentId, { persist: false });
                 isPreview = false;
+                persistCurrentQuestion(activeSession.currentId);
             } else {
                 const askedSet = new Set(activeSession.askedIds);
                 const nextId = window.SelectionUtils.nextQuestionId(idMap.order, askedSet);
                 if (nextId) {
                     isPreview = false;
                     renderQuestionById(nextId, { persist: !isServerMode });
+                    persistCurrentQuestion(nextId);
                     if (historyChip) historyChip.classList.add('hidden');
 
                     if (isServerMode) {
-                        const q = idMap.byId.get(nextId);
+                        const payload = questionPayloadById(nextId);
                         try {
-                            apiPatchCap(serverSessionId, serverSessionKey, { action: 'setCurrentQuestion', question: { text: q && q.text } });
+                            if (payload) apiPatchCap(serverSessionId, serverSessionKey, { action: 'setCurrentQuestion', question: payload });
                         } catch {}
                     }
                 } else {
                     renderQuestionById(null, { persist: false });
                     isPreview = false;
+                    persistCurrentQuestion(null);
                 }
             }
             updateSessionInfo();
@@ -349,8 +399,10 @@
                 if (textarea && currentQuestionId && activeSession) {
                     const val = textarea.value || '';
                     if (isServerMode) {
-                        const q = idMap.byId.get(currentQuestionId);
-                        await apiPatchCap(serverSessionId, serverSessionKey, { action: 'setAnswer', question: { text: q && q.text }, value: val });
+                        const qObj = idMap.byId.get(currentQuestionId);
+                        const payload = questionPayloadById(currentQuestionId);
+                        const baseQuestion = payload || (qObj ? { text: qObj.text, theme: qObj.theme } : { text: '' });
+                        await apiPatchCap(serverSessionId, serverSessionKey, { action: 'setAnswer', question: baseQuestion, value: val });
                         if (!activeSession.answers || typeof activeSession.answers !== 'object') activeSession.answers = {};
                         activeSession.answers[String(currentQuestionId)] = val;
                     } else if (window.SessionStore && typeof window.SessionStore.setAnswer === 'function') {
@@ -361,9 +413,11 @@
             // Record the currently shown question as asked, whether preview or not.
             if (currentQuestionId) {
                 if (isServerMode) {
-                    const q = idMap.byId.get(currentQuestionId);
+                    const qObj = idMap.byId.get(currentQuestionId);
+                    const payload = questionPayloadById(currentQuestionId);
+                    const baseQuestion = payload || (qObj ? { text: qObj.text, theme: qObj.theme } : { text: '' });
                     try {
-                        await apiPatchCap(serverSessionId, serverSessionKey, { action: 'markAsked', question: { text: q && q.text } });
+                        await apiPatchCap(serverSessionId, serverSessionKey, { action: 'markAsked', question: baseQuestion });
                         const now = Date.now();
                         activeSession.askedIds = (activeSession.askedIds || []).concat([currentQuestionId]);
                         activeSession.timestamps = (activeSession.timestamps || []).concat([now]);
@@ -382,15 +436,16 @@
                 return;
             }
             renderQuestionById(nextId, { persist: !isServerMode });
+            persistCurrentQuestion(nextId);
             isPreview = false;
             if (historyChip) historyChip.classList.add('hidden');
             
             // Persist the current question in server mode
             if (isServerMode && nextId) {
-                const q = idMap.byId.get(nextId);
-                try {
-                    await apiPatchCap(serverSessionId, serverSessionKey, { action: 'setCurrentQuestion', question: { text: q && q.text } });
-                } catch {}
+                        const payload = questionPayloadById(nextId);
+                        try {
+                            if (payload) await apiPatchCap(serverSessionId, serverSessionKey, { action: 'setCurrentQuestion', question: payload });
+                        } catch {}
             }
             
             updateSessionInfo();
@@ -420,6 +475,7 @@
             }
             if (last) {
                 renderQuestionById(last, { persist: true });
+                persistCurrentQuestion(last);
             }
             isPreview = false;
             if (historyChip) historyChip.classList.add('hidden');
@@ -437,11 +493,14 @@
                 apiPatchCap(serverSessionId, serverSessionKey, { action: 'reset' }).catch(() => {});
                 activeSession.askedIds = [];
                 activeSession.timestamps = [];
+                activeSession.answers = {};
+                activeSession.currentId = null;
             } else {
                 window.SessionStore.reset(activeSession.name);
                 activeSession = window.SessionStore.open(activeSession.name);
             }
             renderQuestionById(null);
+            persistCurrentQuestion(null);
             updateSessionInfo();
             if (askedContainer && window.AskedList) window.AskedList.update(askedContainer, { askedIds: activeSession.askedIds, timestamps: activeSession.timestamps });
             if (exhaustedBanner) exhaustedBanner.classList.add('invisible');
@@ -670,6 +729,7 @@
                     if (btn) btn.addEventListener('click', () => {
                         const cur = activeSession && activeSession.currentId ? activeSession.currentId : null;
                         renderQuestionById(cur, { persist: false });
+                        persistCurrentQuestion(cur);
                         isPreview = false;
                         historyChip.classList.add('hidden');
                     });

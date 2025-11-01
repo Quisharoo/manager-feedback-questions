@@ -51,6 +51,9 @@ function applySessionAction(session, action, question, value = '') {
       if (typeof session.currentQuestion !== 'undefined') {
         session.currentQuestion = null;
       }
+      if (typeof session.currentQuestionId !== 'undefined') {
+        session.currentQuestionId = null;
+      }
       break;
 
     case 'setAnswer':
@@ -65,7 +68,14 @@ function applySessionAction(session, action, question, value = '') {
 
     case 'setCurrentQuestion':
       if (question && question.text) {
-        session.currentQuestion = question;
+        const next = { text: String(question.text) };
+        if (question.theme) next.theme = question.theme;
+        session.currentQuestion = next;
+        if (question.id) {
+          session.currentQuestionId = String(question.id);
+        } else if (typeof session.currentQuestionId !== 'undefined') {
+          session.currentQuestionId = null;
+        }
       }
       break;
 
