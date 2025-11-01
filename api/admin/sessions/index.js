@@ -1,6 +1,8 @@
-const { parseBody, logRequest } = require('../../../api/_utils');
+const { parseBody, logRequest, requireJsonContentType } = require('../../../api/_utils');
 const store = require('../../../api/_store');
-const { genKey, hashKey, isAdmin, ADMIN_KEY } = require('../../../api/_crypto');
+const { genKey, hashKey, isAdmin, KEY_SIZE_EDIT, KEY_SIZE_VIEW, ADMIN_KEY } = require('../../../api/_crypto');
+const { validateSessionName } = require('../../../api/_validation');
+const { auditLog } = require('../../../api/_audit');
 
 module.exports = async (req, res) => {
   logRequest(req);
@@ -20,18 +22,29 @@ module.exports = async (req, res) => {
   }
 
   if (req.method === 'POST') {
+    // Validate Content-Type
+    if (!requireJsonContentType(req, res)) {
+      return; // Error response already sent
+    }
+
     const body = await parseBody(req);
-    const name = typeof body.name === 'string' ? body.name.trim() : '';
-    if (!name) {
+    // Validate session name
+    const validation = validateSessionName(body.name);
+    if (!validation.valid) {
       res.statusCode = 400;
       res.setHeader('Content-Type', 'application/json');
-      return res.end(JSON.stringify({ error: 'Invalid name' }));
+      return res.end(JSON.stringify({ error: validation.error }));
     }
-    const editKey = genKey(192);
+    const name = validation.sanitized;
+    const editKey = genKey(KEY_SIZE_EDIT);
     const editKeyHash = hashKey(editKey);
-    const viewKey = genKey(160);
+    const viewKey = genKey(KEY_SIZE_VIEW);
     const viewKeyHash = hashKey(viewKey);
     const session = await store.createSession(name, { editKeyHash, viewKeyHash, createdAt: Date.now(), lastAccess: Date.now(), answers: {} });
+
+    // Audit log
+    auditLog('session.create', { sessionId: session.id, sessionName: name, admin: true }, req);
+
     const host = (req.headers && req.headers.host) || '';
     const proto = (req.headers && req.headers['x-forwarded-proto']) || 'http';
     const base = `${proto}://${host}`;

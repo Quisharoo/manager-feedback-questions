@@ -1,6 +1,7 @@
-const { parseBody, logRequest } = require('../../api/_utils');
+const { parseBody, logRequest, requireJsonContentType } = require('../../api/_utils');
 const store = require('../../api/_store');
 const { extractKey, capKeyAllowsRead, keyAllowsWrite } = require('../../api/_crypto');
+const { applySessionAction } = require('../../api/_sessionActions');
 
 module.exports = async (req, res) => {
   logRequest(req);
@@ -31,6 +32,11 @@ module.exports = async (req, res) => {
   }
 
   if (req.method === 'PATCH') {
+    // Validate Content-Type
+    if (!requireJsonContentType(req, res)) {
+      return; // Error response already sent
+    }
+
     if (!keyAllowsWrite(session, key)) {
       res.statusCode = 403;
       res.setHeader('Content-Type', 'application/json');
@@ -42,51 +48,7 @@ module.exports = async (req, res) => {
     const value = typeof body.value === 'string' ? body.value : '';
 
     const updated = await store.updateSession(id, (s) => {
-      if (!s) return null;
-      switch (action) {
-        case 'markAsked':
-          if (question && question.text) {
-            s.asked.push(question);
-            const idx = s.skipped.findIndex(q => q.text === question.text);
-            if (idx !== -1) s.skipped.splice(idx, 1);
-          }
-          break;
-        case 'markSkipped':
-          if (question && question.text) {
-            s.skipped.push(question);
-            const idx = s.asked.findIndex(q => q.text === question.text);
-            if (idx !== -1) s.asked.splice(idx, 1);
-          }
-          break;
-        case 'undoAsked':
-          s.asked.pop();
-          break;
-        case 'undoSkipped':
-          s.skipped.pop();
-          break;
-        case 'reset':
-          s.asked = [];
-          s.skipped = [];
-          // Clear all saved answers on reset to match UI behavior
-          s.answers = {};
-          s.currentQuestion = null;
-          break;
-        case 'setAnswer':
-          s.answers = s.answers && typeof s.answers === 'object' ? s.answers : {};
-          if (question && question.text) {
-            s.answers[String(question.text)] = value;
-          }
-          break;
-        case 'setCurrentQuestion':
-          if (question && question.text) {
-            s.currentQuestion = question;
-          }
-          break;
-        default:
-          break;
-      }
-      s.lastAccess = Date.now();
-      return s;
+      return applySessionAction(s, action, question, value);
     }).catch(() => null);
 
     if (!updated) {

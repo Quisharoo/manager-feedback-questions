@@ -130,4 +130,27 @@ function logRequest(req, extra) {
   }
 }
 
-module.exports = { parseBody, parseCookies, readSessionFromCookies, writeSessionCookie, logRequest, decodeSessionCookie };
+/**
+ * Validate that the request Content-Type is application/json
+ * Returns true if valid, false otherwise
+ */
+function validateJsonContentType(req) {
+  const contentType = req.headers['content-type'] || '';
+  return contentType.includes('application/json');
+}
+
+/**
+ * Check Content-Type and send 415 error if invalid
+ * Returns true if valid, false if error was sent
+ */
+function requireJsonContentType(req, res) {
+  if (!validateJsonContentType(req)) {
+    res.statusCode = 415;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ error: 'Content-Type must be application/json' }));
+    return false;
+  }
+  return true;
+}
+
+module.exports = { parseBody, parseCookies, readSessionFromCookies, writeSessionCookie, logRequest, decodeSessionCookie, validateJsonContentType, requireJsonContentType };

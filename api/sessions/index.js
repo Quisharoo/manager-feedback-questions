@@ -1,5 +1,6 @@
 const { randomUUID } = require('crypto');
-const { parseBody, writeSessionCookie, logRequest } = require('../_utils');
+const { parseBody, writeSessionCookie, logRequest, requireJsonContentType } = require('../_utils');
+const { validateSessionName } = require('../_validation');
 
 module.exports = async (req, res) => {
   logRequest(req);
@@ -10,15 +11,22 @@ module.exports = async (req, res) => {
       return res.end('Method Not Allowed');
     }
 
-    const body = await parseBody(req);
-    const name = typeof body.name === 'string' ? body.name.trim() : '';
-    if (!name) {
-      res.statusCode = 400;
-      res.setHeader('Content-Type', 'application/json');
-      return res.end(JSON.stringify({ error: 'Invalid name' }));
+    // Validate Content-Type
+    if (!requireJsonContentType(req, res)) {
+      return; // Error response already sent
     }
 
-    const session = { id: randomUUID(), name, asked: [], skipped: [] };
+    const body = await parseBody(req);
+
+    // Validate session name
+    const validation = validateSessionName(body.name);
+    if (!validation.valid) {
+      res.statusCode = 400;
+      res.setHeader('Content-Type', 'application/json');
+      return res.end(JSON.stringify({ error: validation.error }));
+    }
+
+    const session = { id: randomUUID(), name: validation.sanitized, asked: [], skipped: [] };
     const slim = { id: session.id, name: session.name, askedIds: [], skippedIds: [] };
     writeSessionCookie(res, slim);
     res.statusCode = 201;

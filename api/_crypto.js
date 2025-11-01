@@ -1,11 +1,15 @@
 const crypto = require('crypto');
 
+// Key size constants (in bits)
+const KEY_SIZE_EDIT = 192;  // 192 bits = 24 bytes for edit access
+const KEY_SIZE_VIEW = 160;  // 160 bits = 20 bytes for view-only access
+
 /**
  * Generate a random key
- * @param {number} bits - Key size in bits (default 192)
+ * @param {number} bits - Key size in bits (default KEY_SIZE_EDIT)
  * @returns {string} Base64url-encoded random key
  */
-function genKey(bits = 192) {
+function genKey(bits = KEY_SIZE_EDIT) {
   return crypto.randomBytes(bits / 8).toString('base64url');
 }
 
@@ -51,7 +55,8 @@ function isAdmin(req) {
   const ADMIN_KEY = process.env.ADMIN_KEY || '';
   if (!ADMIN_KEY) return false;
   const k = extractHeaderKey(req);
-  if (!k) return false;
+  // Early return for empty keys before hashing to prevent timing leaks
+  if (!k || k.length === 0) return false;
   try {
     const a = Buffer.from(hashKey(k));
     const b = Buffer.from(hashKey(ADMIN_KEY));
@@ -130,6 +135,8 @@ module.exports = {
   keyAllowsRead,
   capKeyAllowsRead,
   keyAllowsWrite,
+  KEY_SIZE_EDIT,
+  KEY_SIZE_VIEW,
   get ADMIN_KEY() { return process.env.ADMIN_KEY || ''; },
   get HMAC_SECRET() { return process.env.COOKIE_SECRET || 'dev-secret'; }
 };

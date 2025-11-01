@@ -72,11 +72,35 @@ function updateSession(id, updater) {
   return next;
 }
 
+function listSessions() {
+  const store = readSessions();
+  return Object.values(store.sessions || {});
+}
+
+function deleteSession(id) {
+  // Use the same locking mechanism as updateSession to prevent race conditions
+  const last = updateLocks.get(id) || Promise.resolve();
+  const next = last.then(() => {
+    const store = readSessions();
+    if (!store.sessions[id]) return false;
+    delete store.sessions[id];
+    writeSessions(store);
+    return true;
+  }).catch((e) => { throw e; });
+  // Cleanup when the chain settles
+  updateLocks.set(id, next.finally(() => {
+    if (updateLocks.get(id) === next) updateLocks.delete(id);
+  }));
+  return next;
+}
+
 module.exports = {
   createSession,
   getSession,
   saveSession,
   updateSession,
+  listSessions,
+  deleteSession,
 };
 
 

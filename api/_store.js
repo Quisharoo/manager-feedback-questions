@@ -59,14 +59,20 @@ async function kvSet(key, obj) {
 }
 
 async function kvList(prefix) {
-  // Vercel KV lacks a native key scan in serverless; use a sorted set index
+  // Use Redis set for efficient index management
   const idxKey = `${prefix}:index`;
-  const ids = await kv.get(idxKey);
   let list = [];
   try {
-    list = Array.isArray(ids) ? ids : JSON.parse(ids || '[]');
+    // Try to use smembers for native Redis set operations
+    if (kv.smembers) {
+      list = await kv.smembers(idxKey);
+    } else {
+      // Fallback to legacy JSON parsing for older clients
+      const ids = await kv.get(idxKey);
+      list = Array.isArray(ids) ? ids : JSON.parse(ids || '[]');
+    }
   } catch (e) {
-    console.error('[store] kvList: Failed to parse index', idxKey, e.message);
+    console.error('[store] kvList: Failed to get index', idxKey, e.message);
     list = [];
   }
   const out = [];
@@ -79,17 +85,27 @@ async function kvList(prefix) {
 
 async function kvUpsertIndex(prefix, id) {
   const idxKey = `${prefix}:index`;
-  let arr = await kv.get(idxKey);
   try {
-    arr = Array.isArray(arr) ? arr : JSON.parse(arr || '[]');
+    // Use native Redis SADD for better performance
+    if (kv.sadd) {
+      await kv.sadd(idxKey, id);
+    } else {
+      // Fallback to legacy JSON-based index
+      let arr = await kv.get(idxKey);
+      try {
+        arr = Array.isArray(arr) ? arr : JSON.parse(arr || '[]');
+      } catch (e) {
+        console.error('[store] kvUpsertIndex: Failed to parse index, creating new', idxKey, e.message);
+        arr = [];
+      }
+      const set = new Set(arr);
+      set.add(id);
+      const next = JSON.stringify(Array.from(set));
+      await kv.set(idxKey, next);
+    }
   } catch (e) {
-    console.error('[store] kvUpsertIndex: Failed to parse index, creating new', idxKey, e.message);
-    arr = [];
+    console.error('[store] kvUpsertIndex: Failed to add to index', idxKey, id, e.message);
   }
-  const set = new Set(arr);
-  set.add(id);
-  const next = JSON.stringify(Array.from(set));
-  await kv.set(idxKey, next);
 }
 
 async function createSession(name, extra) {
@@ -130,6 +146,40 @@ async function listSessions() {
   return [];
 }
 
-module.exports = { createSession, getSession, saveSession, updateSession, listSessions };
+async function kvRemoveFromIndex(prefix, id) {
+  const idxKey = `${prefix}:index`;
+  try {
+    // Use native Redis SREM for better performance
+    if (kv.srem) {
+      await kv.srem(idxKey, id);
+    } else {
+      // Fallback to legacy JSON-based index
+      let arr = await kv.get(idxKey);
+      try {
+        arr = Array.isArray(arr) ? arr : JSON.parse(arr || '[]');
+      } catch (e) {
+        console.error('[store] kvRemoveFromIndex: Failed to parse index', idxKey, e.message);
+        return;
+      }
+      const filtered = arr.filter(item => item !== id);
+      const next = JSON.stringify(filtered);
+      await kv.set(idxKey, next);
+    }
+  } catch (e) {
+    console.error('[store] kvRemoveFromIndex: Failed to remove from index', idxKey, id, e.message);
+  }
+}
+
+async function deleteSession(id) {
+  if (useKV) {
+    await kv.del(`session:${id}`);
+    await kvRemoveFromIndex('session', id);
+    return true;
+  }
+  if (fileStore.deleteSession) return fileStore.deleteSession(id);
+  return false;
+}
+
+module.exports = { createSession, getSession, saveSession, updateSession, listSessions, deleteSession };
 
 

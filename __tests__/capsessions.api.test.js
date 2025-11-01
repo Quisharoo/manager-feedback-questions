@@ -56,7 +56,10 @@ describe('serverless /api/capsessions', () => {
     expect(createRes.statusCode).toBe(201);
     const created = parseJson(createRes);
     expect(typeof created.id).toBe('string');
-    expect(created.links && created.links.edit).toBeTruthy();
+    // API now returns separate edit and view links
+    expect(created.links).toBeTruthy();
+    expect(created.links.edit).toBeTruthy();
+    expect(created.links.view).toBeTruthy();
     const url = new URL(created.links.edit, 'http://x');
     const id = created.id;
     const key = url.searchParams.get('key');

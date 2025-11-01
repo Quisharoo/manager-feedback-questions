@@ -640,10 +640,7 @@
                 if (resetBtn) resetBtn.classList.remove('hidden');
                 ensureResultsButton();
                 if (resultsBtn) resultsBtn.classList.remove('hidden');
-                try {
-                    const key = sessionStorage.getItem('mfq_admin_key') || '';
-                    if (key) ensureAdminControls(key);
-                } catch {}
+                // Admin controls removed - now integrated with session picker
                 if (questionCard) questionCard.classList.remove('hidden');
             } catch {}
             const overlay = document.getElementById('sessionGateOverlay');
@@ -723,6 +720,136 @@
         const res = await fetch('/api/admin/sessions', { headers: { Authorization: 'Key ' + key } });
         if (!res.ok) throw new Error('Invalid');
         return res.json().catch(() => ({}));
+    }
+
+    async function deleteAdminSession(id, adminKey) {
+        const res = await fetch(`/api/admin/sessions/${id}`, {
+            method: 'DELETE',
+            headers: { Authorization: 'Key ' + adminKey }
+        });
+        if (!res.ok) throw new Error('Failed to delete');
+        return res.json();
+    }
+
+    function formatTimestamp(timestamp) {
+        if (!timestamp) return 'N/A';
+        const date = new Date(timestamp);
+        const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+
+        if (diffMins < 1) return 'just now';
+        if (diffMins < 60) return `${diffMins}m ago`;
+        if (diffHours < 24) return `${diffHours}h ago`;
+        if (diffDays < 7) return `${diffDays}d ago`;
+        return date.toLocaleDateString();
+    }
+
+    function showAdminSessionsPanel(sessions, adminKey) {
+        // Remove existing panel if any
+        const existing = document.getElementById('adminSessionsPanel');
+        if (existing) existing.remove();
+
+        const panel = document.createElement('div');
+        panel.id = 'adminSessionsPanel';
+        panel.className = 'fixed bottom-20 right-6 bg-white rounded-lg shadow-xl border border-gray-200 w-96 max-h-96 overflow-hidden flex flex-col';
+        panel.style.zIndex = '50';
+
+        const header = document.createElement('div');
+        header.className = 'p-3 border-b border-gray-200 flex items-center justify-between bg-gray-50';
+        header.innerHTML = `
+            <div class="flex items-center gap-2">
+                <span class="text-sm font-semibold text-gray-700">Server Sessions</span>
+                <span class="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">${sessions.length}</span>
+            </div>
+            <button id="adminPanelClose" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times"></i>
+            </button>
+        `;
+
+        const listContainer = document.createElement('div');
+        listContainer.className = 'overflow-y-auto flex-1';
+
+        if (sessions.length === 0) {
+            listContainer.innerHTML = `
+                <div class="p-4 text-center text-gray-500 text-sm">
+                    <div class="mb-2"><i class="fas fa-info-circle"></i></div>
+                    <div>No sessions yet. Create one to get started!</div>
+                </div>
+            `;
+        } else {
+            const sortedSessions = [...sessions].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+            sortedSessions.forEach(session => {
+                const item = document.createElement('div');
+                item.className = 'p-3 border-b border-gray-100 hover:bg-gray-50 transition-colors';
+                item.innerHTML = `
+                    <div class="flex items-start justify-between gap-2">
+                        <div class="flex-1 min-w-0">
+                            <div class="text-sm font-medium text-gray-900 truncate">${escapeHtml(session.name)}</div>
+                            <div class="text-xs text-gray-500 mt-1">
+                                <div>Created: ${formatTimestamp(session.createdAt)}</div>
+                                <div>Last access: ${formatTimestamp(session.lastAccess)}</div>
+                            </div>
+                        </div>
+                        <button class="admin-delete-session text-xs text-red-600 hover:text-red-800 px-2 py-1 rounded hover:bg-red-50" data-session-id="${session.id}" title="Delete session">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                    <div class="mt-2 text-xs text-gray-400 font-mono truncate" title="${session.id}">ID: ${session.id}</div>
+                `;
+                listContainer.appendChild(item);
+            });
+        }
+
+        const footer = document.createElement('div');
+        footer.className = 'p-2 border-t border-gray-200 bg-yellow-50';
+        footer.innerHTML = `
+            <div class="text-xs text-yellow-800 flex items-start gap-2">
+                <i class="fas fa-exclamation-triangle mt-0.5"></i>
+                <div>Session links are only shown once at creation. Save them when creating sessions!</div>
+            </div>
+        `;
+
+        panel.appendChild(header);
+        panel.appendChild(listContainer);
+        panel.appendChild(footer);
+        document.body.appendChild(panel);
+
+        // Event handlers
+        const closeBtn = header.querySelector('#adminPanelClose');
+        closeBtn.addEventListener('click', () => panel.remove());
+
+        // Delete session handlers
+        const deleteButtons = listContainer.querySelectorAll('.admin-delete-session');
+        deleteButtons.forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const sessionId = btn.dataset.sessionId;
+                const sessionItem = btn.closest('.p-3');
+                const sessionName = sessionItem.querySelector('.text-sm').textContent;
+
+                if (!confirm(`Delete session "${sessionName}"?\n\nThis cannot be undone.`)) return;
+
+                try {
+                    await deleteAdminSession(sessionId, adminKey);
+                    toast('Session deleted');
+                    // Refresh the panel
+                    const json = await validateAdminKey(adminKey);
+                    showAdminSessionsPanel(json.sessions || [], adminKey);
+                } catch (err) {
+                    toast('Failed to delete session');
+                    console.error('Delete failed:', err);
+                }
+            });
+        });
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 
     function openShareLinksDialog(links) {
@@ -834,6 +961,14 @@
                 const json = await res.json();
                 close();
                 if (json && json.links) openShareLinksDialog(json.links);
+                // Refresh the sessions list
+                try {
+                    const updatedJson = await validateAdminKey(adminKey);
+                    const sessions = Array.isArray(updatedJson.sessions) ? updatedJson.sessions : [];
+                    loadAdminSessions(adminKey, sessions);
+                } catch (e) {
+                    console.error('Failed to refresh sessions:', e);
+                }
             } catch {
                 toast('Failed to create');
             }
@@ -841,23 +976,12 @@
         setTimeout(() => { try { input.focus(); } catch {} }, 0);
     }
 
-    function ensureAdminControls(adminKey) {
-        if (!adminKey) return;
-        let floatBtn = document.getElementById('adminCreateBtn');
-        if (!floatBtn) {
-            floatBtn = document.createElement('button');
-            floatBtn.id = 'adminCreateBtn';
-            floatBtn.className = 'fixed bottom-6 right-6 btn-primary text-white px-4 py-2 rounded-full shadow-lg';
-            floatBtn.textContent = 'Create server session';
-            floatBtn.style.zIndex = '60';
-            floatBtn.addEventListener('click', () => {
-                if (!floatBtn._adminKey) return;
-                openCreateServerSessionDialog(floatBtn._adminKey);
-            });
-            document.body.appendChild(floatBtn);
+    function loadAdminSessions(adminKey, sessions) {
+        // Load sessions into the session picker's "Existing" tab
+        const sessionSection = document.getElementById('session-section');
+        if (sessionSection && window.SessionPicker) {
+            window.SessionPicker.setAdminSessions(sessionSection, sessions, adminKey);
         }
-        floatBtn._adminKey = adminKey;
-        floatBtn.classList.remove('hidden');
     }
 
     function openAdminDialog(opts) {
@@ -928,9 +1052,10 @@
                 const json = await validateAdminKey(key);
                 try { sessionStorage.setItem('mfq_admin_key', key); } catch {}
                 close();
-                const names = Array.isArray(json.sessions) ? json.sessions.map(s => s.name).filter(Boolean) : [];
+                const sessions = Array.isArray(json.sessions) ? json.sessions : [];
+                const names = sessions.map(s => s.name).filter(Boolean);
                 toast(names.length ? 'Admin OK • ' + names.length + ' sessions' : 'Admin OK');
-                ensureAdminControls(key);
+                loadAdminSessions(key, sessions);
             } catch (e) {
                 close({ restore: false });
                 openAdminDialog({ preset: input.value || '', error: 'Invalid admin key. Try again.' });
@@ -955,9 +1080,11 @@
             openAdminDialog();
             return;
         }
-        validateAdminKey(existing).then(() => {
-            // valid, show quick controls
-            ensureAdminControls(existing);
+        validateAdminKey(existing).then((json) => {
+            // valid, load sessions into picker
+            const sessions = Array.isArray(json.sessions) ? json.sessions : [];
+            toast(sessions.length ? `Admin OK • ${sessions.length} sessions` : 'Admin OK');
+            loadAdminSessions(existing, sessions);
         }).catch(() => {
             openAdminDialog({ preset: existing, error: 'Saved key is no longer valid.' });
         });

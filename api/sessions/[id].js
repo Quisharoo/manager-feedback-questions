@@ -1,4 +1,4 @@
-const { parseBody, readSessionFromCookies, writeSessionCookie, logRequest } = require('../_utils');
+const { parseBody, readSessionFromCookies, writeSessionCookie, logRequest, requireJsonContentType } = require('../_utils');
 const { idFromAny, toQuestion } = require('../questions');
 
 module.exports = async (req, res) => {
@@ -50,6 +50,11 @@ module.exports = async (req, res) => {
   }
 
   if (req.method === 'PATCH') {
+    // Validate Content-Type
+    if (!requireJsonContentType(req, res)) {
+      return; // Error response already sent
+    }
+
     const body = await parseBody(req);
     const action = body.action;
     const question = body.question;
