@@ -88,8 +88,10 @@
             try {
                 if (id) {
                     sessionStorage.setItem(storageKey, String(id));
+                    localStorage.setItem(storageKey, String(id));
                 } else {
                     sessionStorage.removeItem(storageKey);
+                    localStorage.removeItem(storageKey);
                 }
             } catch {}
         }
@@ -98,7 +100,7 @@
             if (!isServerMode) return null;
             const storageKey = `mfq_current_${serverSessionId}`;
             try {
-                const stored = sessionStorage.getItem(storageKey);
+                const stored = sessionStorage.getItem(storageKey) || localStorage.getItem(storageKey);
                 return stored && stored.trim() ? stored : null;
             } catch {
                 return null;

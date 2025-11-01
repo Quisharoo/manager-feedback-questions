@@ -1,3 +1,24 @@
 {
-  "sessions": {}
+  "sessions": {
+    "35b5cda0-3b73-4561-aeb6-e727219ad436": {
+      "id": "35b5cda0-3b73-4561-aeb6-e727219ad436",
+      "name": "asdasdas",
+      "asked": [
+        {
+          "id": "23:188661793",
+          "text": "What's something you wish we did more efficiently as a team?",
+          "theme": "Efficiency + Frustrations"
+        }
+      ],
+      "skipped": [],
+      "editKeyHash": "DcNPALVQxOhgOBVabhEX5jdXMnn3oPEAUi4xicy9aWs=",
+      "viewKeyHash": "DcNPALVQxOhgOBVabhEX5jdXMnn3oPEAUi4xicy9aWs=",
+      "createdAt": 1762032497451,
+      "lastAccess": 1762032516843,
+      "cap": true,
+      "answers": {
+        "What's something you wish we did more efficiently as a team?": "asdadasdsad"
+      }
+    }
+  }
 }
