@@ -202,21 +202,21 @@
 
                 if (currentId) {
                     isPreview = false;
-                    renderQuestionById(currentId, { persist: false });
                     persistCurrentQuestion(currentId);
+                    renderQuestionById(currentId, { persist: false });
                 } else {
                     const askedSet = new Set(activeSession.askedIds);
                     const nextId = window.SelectionUtils.nextQuestionId(idMap.order, askedSet);
                     if (nextId) {
                         isPreview = false;
-                        renderQuestionById(nextId, { persist: false });
-                        persistCurrentQuestion(nextId);
                         try {
                             const payload = questionPayloadById(nextId);
                             if (isServerMode && payload) {
                                 await apiPatchCap(serverSessionId, serverSessionKey, { action: 'setCurrentQuestion', question: payload });
                             }
                         } catch {}
+                        persistCurrentQuestion(nextId);
+                        renderQuestionById(nextId, { persist: false });
                     } else {
                         renderQuestionById(null, { persist: false });
                         persistCurrentQuestion(null);
@@ -325,7 +325,7 @@
             resetBtn.disabled = false;
         }
 
-        function onOpenSession(name) {
+        async function onOpenSession(name) {
             if (!name) return;
             if (isServerMode) {
                 activeSession = activeSession && activeSession.name ? activeSession : { name, askedIds: [], timestamps: [] };
@@ -335,24 +335,24 @@
             }
             window.__activeSessionName = activeSession.name;
             if (activeSession.currentId) {
-                renderQuestionById(activeSession.currentId, { persist: false });
                 isPreview = false;
                 persistCurrentQuestion(activeSession.currentId);
+                renderQuestionById(activeSession.currentId, { persist: false });
             } else {
                 const askedSet = new Set(activeSession.askedIds);
                 const nextId = window.SelectionUtils.nextQuestionId(idMap.order, askedSet);
                 if (nextId) {
                     isPreview = false;
-                    renderQuestionById(nextId, { persist: !isServerMode });
-                    persistCurrentQuestion(nextId);
                     if (historyChip) historyChip.classList.add('hidden');
 
                     if (isServerMode) {
                         const payload = questionPayloadById(nextId);
                         try {
-                            if (payload) apiPatchCap(serverSessionId, serverSessionKey, { action: 'setCurrentQuestion', question: payload });
+                            if (payload) await apiPatchCap(serverSessionId, serverSessionKey, { action: 'setCurrentQuestion', question: payload });
                         } catch {}
                     }
+                    persistCurrentQuestion(nextId);
+                    renderQuestionById(nextId, { persist: !isServerMode });
                 } else {
                     renderQuestionById(null, { persist: false });
                     isPreview = false;
@@ -437,19 +437,17 @@
                 isAdvancing = false;
                 return;
             }
-            renderQuestionById(nextId, { persist: !isServerMode });
+            if (isServerMode && nextId) {
+                const payload = questionPayloadById(nextId);
+                try {
+                    if (payload) await apiPatchCap(serverSessionId, serverSessionKey, { action: 'setCurrentQuestion', question: payload });
+                } catch {}
+            }
             persistCurrentQuestion(nextId);
+            renderQuestionById(nextId, { persist: !isServerMode });
             isPreview = false;
             if (historyChip) historyChip.classList.add('hidden');
-            
-            // Persist the current question in server mode
-            if (isServerMode && nextId) {
-                        const payload = questionPayloadById(nextId);
-                        try {
-                            if (payload) await apiPatchCap(serverSessionId, serverSessionKey, { action: 'setCurrentQuestion', question: payload });
-                        } catch {}
-            }
-            
+
             updateSessionInfo();
             if (askedContainer && window.AskedList) {
                 const answeredIds = activeSession.answers ? Object.entries(activeSession.answers || {}).filter(([,v]) => typeof v === 'string' && v.trim() !== '').map(([k]) => String(k)) : [];
