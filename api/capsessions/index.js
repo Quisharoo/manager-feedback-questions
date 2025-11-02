@@ -20,23 +20,19 @@ module.exports = async (req, res) => {
     return; // Error response already sent
   }
 
-  // Check admin authentication if ADMIN_KEY is configured
-  if (ADMIN_KEY && !isAdmin(req)) {
-    res.statusCode = 403;
-    res.setHeader('Content-Type', 'application/json');
-    return res.end(JSON.stringify({ error: 'Forbidden: Admin authentication required' }));
-  }
-
-  // Check rate limit (only for non-admin users to prevent abuse)
-  const rateLimitResult = checkRateLimit(req);
-  if (!rateLimitResult.allowed) {
-    res.statusCode = 429;
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Retry-After', rateLimitResult.retryAfter);
-    return res.end(JSON.stringify({
-      error: 'Too many session creation requests. Please try again later.',
-      retryAfter: rateLimitResult.retryAfter
-    }));
+  // Rate limit non-admin users to prevent abuse (admins bypass rate limiting)
+  const isAdminUser = ADMIN_KEY && isAdmin(req);
+  if (!isAdminUser) {
+    const rateLimitResult = checkRateLimit(req);
+    if (!rateLimitResult.allowed) {
+      res.statusCode = 429;
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Retry-After', rateLimitResult.retryAfter);
+      return res.end(JSON.stringify({
+        error: 'Too many session creation requests. Please try again later.',
+        retryAfter: rateLimitResult.retryAfter
+      }));
+    }
   }
   const body = await parseBody(req);
 

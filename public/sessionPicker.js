@@ -171,8 +171,9 @@
                         const card = document.createElement('div');
                         card.className = 'bg-white rounded-xl shadow p-4';
 
-                        // Check if admin mode
-                        const isAdminMode = state._adminSessions && Array.isArray(state._adminSessions);
+                        // Check if admin mode - use URL param as source of truth
+                        const isAdminMode = (typeof window !== 'undefined' && window.location.href.includes('admin=1'));
+                        const hasAdminSessions = state._adminSessions && Array.isArray(state._adminSessions);
 
                         // Add admin mode banner at the top
                         if (isAdminMode) {
@@ -226,11 +227,9 @@
                         const select = document.createElement('select');
                         select.id = 'sessionSelect';
 
-                        // Check if we're in admin mode and have server sessions
-                        const isAdmin = state._adminSessions && Array.isArray(state._adminSessions);
-
                         // In admin mode, add visual indication that sessions are locked
-                        const selectClass = isAdmin
+                        // Use the same isAdminMode variable defined at the top of the render function
+                        const selectClass = isAdminMode
                                 ? 'flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-gray-50'
                                 : 'flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400';
                         select.className = selectClass;
@@ -238,7 +237,7 @@
                         none.value = '';
                         none.textContent = '— Select session —';
                         select.appendChild(none);
-                        if (isAdmin) {
+                        if (hasAdminSessions) {
                                 // Show server sessions with metadata
                                 state._adminSessions.forEach(session => {
                                         const opt = document.createElement('option');
@@ -267,11 +266,10 @@
                         openBtn.className = 'btn-primary text-white font-semibold px-4 py-2 rounded disabled:opacity-50';
                         openBtn.textContent = 'Open session';
                         openBtn.disabled = true;
-                        // In admin mode, disable open button with tooltip
-                        if (isAdmin) {
-                                openBtn.disabled = true;
-                                openBtn.title = 'Sessions can only be accessed via their unique capability link';
-                                openBtn.className = 'bg-gray-300 text-gray-500 font-semibold px-4 py-2 rounded cursor-not-allowed';
+                        // In admin mode, hide open button entirely (sessions can only be accessed via capability links)
+                        // isAdminMode is already defined at the top of this render function
+                        if (isAdminMode) {
+                                openBtn.style.display = 'none';
                         }
                         const deleteBtn = document.createElement('button');
                         deleteBtn.id = 'deleteSessionBtn';
@@ -280,13 +278,13 @@
                         deleteBtn.textContent = 'Delete';
                         deleteBtn.disabled = true;
                         select.addEventListener('change', () => {
-                                if (!isAdmin) {
+                                if (!isAdminMode) {
                                         openBtn.disabled = !select.value;
                                 }
                         });
                         select.addEventListener('change', () => { deleteBtn.disabled = !select.value; });
                         openBtn.addEventListener('click', () => {
-                                if (isAdmin) {
+                                if (isAdminMode) {
                                         // Show error toast in admin mode
                                         if (window.toast) {
                                                 window.toast('Sessions can only be accessed via their unique capability link. Use the share link shown when you created the session.', { type: 'error', duration: 5000 });
@@ -300,7 +298,7 @@
                                 if (e.key === 'Enter' && select.value) { e.preventDefault(); openBtn.click(); }
                         });
                         // In admin mode, add lock icon before select
-                        if (isAdmin) {
+                        if (isAdminMode) {
                                 const lockIcon = document.createElement('span');
                                 lockIcon.className = 'text-gray-500 text-sm';
                                 lockIcon.innerHTML = '<i class="fas fa-lock"></i>';
@@ -581,7 +579,7 @@
                         container.appendChild(card);
 
                         // Default to New tab if no sessions exist; otherwise Existing
-                        const hasAdminSessions = state._adminSessions && state._adminSessions.length > 0;
+                        // hasAdminSessions is already defined at the top of this render function
                         const hasSessions = state.sessions.length > 0 || hasAdminSessions;
                         if (!hasSessions) {
                                 // hide Existing tab and panel fully

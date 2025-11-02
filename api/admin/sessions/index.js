@@ -14,8 +14,14 @@ module.exports = async (req, res) => {
 
   if (req.method === 'GET') {
     const list = await store.listSessions();
-    // Hide sensitive hashes in admin list
-    const safe = list.map(s => ({ id: s.id, name: s.name, createdAt: s.createdAt, lastAccess: s.lastAccess }));
+    // Hide sensitive hashes in admin list, but include metadata needed for UI
+    const safe = list.map(s => ({ 
+      id: s.id, 
+      name: s.name, 
+      createdAt: s.createdAt, 
+      lastAccess: s.lastAccess,
+      asked: s.asked || [] // Include asked questions array for UI display
+    }));
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
     return res.end(JSON.stringify({ sessions: safe }));

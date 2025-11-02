@@ -807,16 +807,126 @@
                 if (questionCard) questionCard.classList.add('hidden');
             } catch {}
 
+            // Check if we're in admin mode
+            const isAdminMode = window.location.href.includes('admin=1');
+
+            // In admin mode, don't show anything - AdminUI.init() will handle it
+            if (isAdminMode) {
+                // Admin flow handles its own UI via AdminUI.init()
+                return;
+            }
+
+            // Regular mode flow:
             // Show welcome screen for first-time users
             if (!hasSeenWelcome()) {
                 showWelcomeScreen(() => {
-                    // After welcome, show session gate
-                    showSessionGate();
+                    // After welcome, show create session dialog
+                    showCreateSessionDialog();
                 });
                 return;
             }
 
-            showSessionGate();
+            // Regular mode: show simple "Create Session" dialog
+            showCreateSessionDialog();
+        }
+
+        function showCreateSessionDialog() {
+            if (document.getElementById('createSessionOverlay')) return;
+            const overlay = document.createElement('div');
+            overlay.id = 'createSessionOverlay';
+            overlay.className = 'fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50';
+            const dialog = document.createElement('div');
+            dialog.className = 'bg-white rounded-lg p-6 w-full max-w-md shadow-lg';
+            dialog.setAttribute('role', 'dialog');
+            dialog.setAttribute('aria-modal', 'true');
+            dialog.setAttribute('aria-labelledby', 'createTitle');
+            dialog.tabIndex = -1;
+            dialog.innerHTML = `
+                <h2 id="createTitle" class="text-xl font-semibold mb-2">Create a Session</h2>
+                <p class="text-sm text-gray-600 mb-4">Give your session a name to get started. You'll receive a unique shareable link.</p>
+                <label class="block text-sm font-medium text-gray-700 mb-2" for="sessionNameInput">Session name</label>
+                <input id="sessionNameInput" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-indigo-400" placeholder="e.g., 1:1 with Alex">
+                <div class="flex justify-end gap-2">
+                    <button id="createSessionBtn" class="btn-primary text-white font-semibold px-6 py-2 rounded-lg disabled:opacity-50" disabled>Create</button>
+                </div>
+            `;
+            overlay.appendChild(dialog);
+            document.body.appendChild(overlay);
+
+            const prevOverflow = document.body.style.overflow;
+            const prevPaddingRight = document.body.style.paddingRight;
+            const scrollBarWidth = window.innerWidth - document.documentElement.clientWidth;
+            if (scrollBarWidth > 0) {
+                document.body.style.paddingRight = String(scrollBarWidth) + 'px';
+            }
+            document.body.style.overflow = 'hidden';
+
+            const input = dialog.querySelector('#sessionNameInput');
+            const createBtn = dialog.querySelector('#createSessionBtn');
+
+            input.addEventListener('input', () => {
+                createBtn.disabled = !input.value.trim();
+            });
+
+            async function createSession() {
+                const name = input.value.trim();
+                if (!name) return;
+
+                showLoading('Creating session...');
+                try {
+                    const res = await fetch('/api/capsessions', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name })
+                    });
+                    
+                    if (res.ok) {
+                        const json = await res.json();
+                        const links = json && json.links;
+                        
+                        if (links && typeof links.edit === 'string' && links.edit) {
+                            hideLoading();
+                            // Show the share links dialog
+                            if (typeof window.openShareLinksDialog === 'function') {
+                                window.openShareLinksDialog(links);
+                            }
+                            // After showing links, redirect to the edit URL
+                            setTimeout(() => {
+                                window.location.href = links.edit;
+                            }, 500);
+                            return;
+                        }
+                    } else {
+                        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
+                        hideLoading();
+                        toast(`Failed to create session: ${errorData.error || 'Unknown error'}`, { type: 'error', duration: 4000 });
+                    }
+                } catch (e) {
+                    console.error('Failed to create session:', e);
+                    hideLoading();
+                    toast(`Failed to create session: ${e.message}`, { type: 'error', duration: 4000 });
+                }
+            }
+
+            createBtn.addEventListener('click', createSession);
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !createBtn.disabled) {
+                    e.preventDefault();
+                    createSession();
+                }
+            });
+
+            // Can't close the dialog - must create a session
+            overlay.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') { e.preventDefault(); }
+            });
+
+            overlay._restore = () => {
+                document.body.style.overflow = prevOverflow;
+                document.body.style.paddingRight = prevPaddingRight;
+            };
+
+            setTimeout(() => { try { input.focus(); } catch {} }, 100);
         }
 
         function showSessionGate() {
@@ -1450,10 +1560,12 @@
         }
 
         overlay.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') { e.preventDefault(); close(); }
+            // Prevent dismissing the admin dialog - must authenticate
+            if (e.key === 'Escape') { e.preventDefault(); }
             if (e.key === 'Enter') { e.preventDefault(); confirmBtn.click(); }
         });
-        cancelBtn.addEventListener('click', () => close());
+        // Don't allow cancel - must provide valid admin key
+        cancelBtn.style.display = 'none';
         confirmBtn.addEventListener('click', async () => {
             const key = (input.value || '').trim();
             if (!key) return;
