@@ -1,9 +1,6 @@
 (function() {
-        // SessionPicker operates in two modes:
-        // - Regular mode: Create capability sessions (redirects to ?id=...&key=... link after creation)
-        // - Admin mode (?admin=1): Manage all sessions (create/delete, view metadata)
-        //
-        // Note: localStorage sessions are kept as offline fallback only when capability creation fails.
+        // SessionPicker is used only in admin mode (?admin=1) to manage capability sessions.
+        // Regular users never see this - they use showCreateSessionDialog() instead.
 
         function isAdminMode() {
                 if (typeof window === 'undefined') return false;
@@ -18,11 +15,8 @@
         function ensure(container) {
                 if (!container._sessionPicker) {
                         container._sessionPicker = {
-                                sessions: [],
                                 _adminSessions: [],
                                 _adminKey: null,
-                                onOpen: function() {},
-                                onCreate: function() {},
                                 helperEl: null
                         };
                 }
@@ -34,18 +28,6 @@
                 return empty
                         ? 'Create a new session to begin.'
                         : 'Pick an existing session or create a new one.';
-        }
-
-        function filterSessions(list) {
-                const out = [];
-                const seen = new Set();
-                (Array.isArray(list) ? list : []).forEach(n => {
-                        const trimmed = typeof n === 'string' ? n.trim() : '';
-                        if (!trimmed || seen.has(trimmed)) return;
-                        seen.add(trimmed);
-                        out.push(trimmed);
-                });
-                return out;
         }
 
         function renderCollapsedCreateArea(container, state) {
@@ -91,7 +73,7 @@
                 });
                 input.addEventListener('input', () => {
                         const trimmed = (input.value || '').trim();
-                        createBtn.disabled = !trimmed || (window.SessionStore && window.SessionStore.exists(trimmed));
+                        createBtn.disabled = !trimmed;
                 });
                 createBtn.addEventListener('click', async () => {
                         const name = (input.value || '').trim();
@@ -158,10 +140,8 @@
         }
 
         const SessionPicker = {
-                render(container, { sessions = [], onOpen } = {}) {
+                render(container) {
                         const state = ensure(container);
-                        state.sessions = filterSessions(sessions);
-                        state.onOpen = typeof onOpen === 'function' ? onOpen : function() {};
 
                         container.innerHTML = '';
                         const card = document.createElement('div');
@@ -245,14 +225,6 @@
                                         opt.dataset.questionsCount = questionsCount;
                                         select.appendChild(opt);
                                 });
-                        } else {
-                                // Show local sessions
-                                state.sessions.forEach(name => {
-                                        const opt = document.createElement('option');
-                                        opt.value = name;
-                                        opt.textContent = name;
-                                        select.appendChild(opt);
-                                });
                         }
                         const openBtn = document.createElement('button');
                         openBtn.id = 'openSessionBtn';
@@ -277,14 +249,10 @@
                         });
                         select.addEventListener('change', () => { deleteBtn.disabled = !select.value; });
                         openBtn.addEventListener('click', () => {
-                                if (isAdmin) {
-                                        // Show error toast in admin mode
-                                        if (window.toast) {
-                                                window.toast('Sessions can only be accessed via their unique capability link. Use the share link shown when you created the session.', { type: 'error', duration: 5000 });
-                                        }
-                                        return;
+                                // In admin mode, show error toast (button is hidden but handler exists for safety)
+                                if (window.toast) {
+                                        window.toast('Sessions can only be accessed via their unique capability link. Use the share link shown when you created the session.', { type: 'error', duration: 5000 });
                                 }
-                                if (select.value) state.onOpen && state.onOpen(select.value);
                         });
                         // Enter on select opens
                         select.addEventListener('keydown', (e) => {
@@ -462,7 +430,7 @@
                         createBtn.disabled = true;
                         input.addEventListener('input', () => {
                                 const trimmed = (input.value || '').trim();
-                                createBtn.disabled = !trimmed || (window.SessionStore && window.SessionStore.exists(trimmed));
+                                createBtn.disabled = !trimmed;
                         });
                         async function submitCreate() {
                                 const name = (input.value || '').trim();
@@ -561,9 +529,7 @@
                         container.appendChild(card);
 
                         // Default to New tab if no sessions exist; otherwise Existing
-                        // hasAdminSessions is already defined at the top of this render function
-                        const hasSessions = state.sessions.length > 0 || hasAdminSessions;
-                        if (!hasSessions) {
+                        if (!hasAdminSessions) {
                                 // hide Existing tab and panel fully
                                 tabExisting.classList.add('hidden');
                                 panelExisting.classList.add('hidden');
@@ -575,49 +541,6 @@
                                 tabExisting.classList.remove('hidden');
                                 activate('existing');
                                 helper.textContent = helperCopyForState({ empty: false });
-                        }
-                },
-		updateSessions(container, sessions) {
-			const state = ensure(container);
-			// Admin mode owns the session list entirely; skip local updates to avoid clobbering server data.
-			if (state._adminKey) {
-				return;
-			}
-			state.sessions = filterSessions(sessions);
-                        const select = container.querySelector('#sessionSelect');
-                        if (select) {
-                                const current = select.value;
-                                select.innerHTML = '';
-                                const none = document.createElement('option');
-                                none.value = '';
-                                none.textContent = '— Select session —';
-                                select.appendChild(none);
-                                state.sessions.forEach(name => {
-                                        const opt = document.createElement('option');
-                                        opt.value = name;
-                                        opt.textContent = name;
-                                        select.appendChild(opt);
-                                });
-                                if (state.sessions.includes(current)) select.value = current;
-                        }
-                        // Update helper, tabs, and panel visibility depending on session count
-                        const helper = state.helperEl || container.querySelector('#sessionPickerHelper');
-                        const tabExisting = container.querySelector('#tab-existing');
-                        const tabNew = container.querySelector('#tab-new');
-                        const panelExisting = container.querySelector('[role="tabpanel"][aria-labelledby="tab-existing"]');
-                        const panelNew = container.querySelector('[role="tabpanel"][aria-labelledby="tab-new"]');
-                        if (state.sessions.length === 0) {
-                                if (helper) helper.textContent = helperCopyForState({ empty: true });
-                                if (tabExisting) tabExisting.classList.add('hidden');
-                                if (panelExisting) panelExisting.classList.add('hidden');
-                                if (tabNew) {
-                                        tabNew.setAttribute('aria-selected', 'true');
-                                        tabNew.className = 'px-3 py-1.5 text-sm bg-indigo-50 text-indigo-700';
-                                }
-                                if (panelNew) panelNew.classList.remove('hidden');
-                        } else {
-                                if (helper) helper.textContent = helperCopyForState({ empty: false });
-                                if (tabExisting) tabExisting.classList.remove('hidden');
                         }
                 },
                 setAdminSessions(container, sessions, adminKey) {

@@ -678,14 +678,8 @@
         function renderSessionPickerInto(container) {
             if (container && window.SessionPicker) {
                 sessionPickerHost = container;
-
-                // Only used in admin mode - sessions will be loaded after authentication
-                const sessions = [];
-
-                window.SessionPicker.render(container, {
-                    sessions: sessions,
-                    onOpen: onOpenSession
-                });
+                // Admin mode - sessions will be loaded after authentication via setAdminSessions()
+                window.SessionPicker.render(container);
             }
         }
 
