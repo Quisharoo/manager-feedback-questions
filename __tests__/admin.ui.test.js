@@ -17,6 +17,7 @@ describe('Admin UI', () => {
     require('../public/sessionStore');
     require('../public/selectionUtils');
     require('../public/askedList');
+    require('../public/sessionApi');
     require('../public/sessionPicker');
   });
 
@@ -57,6 +58,7 @@ describe('Admin UI', () => {
     require('../public/sessionStore');
     require('../public/selectionUtils');
     require('../public/askedList');
+    require('../public/sessionApi');
     require('../public/sessionPicker');
     loadWithUrl('https://example.com/?admin=1');
     global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ sessions: [] }) });
@@ -66,5 +68,4 @@ describe('Admin UI', () => {
     expect(adminInput).toBeFalsy();
   });
 });
-
 

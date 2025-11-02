@@ -60,8 +60,8 @@ module.exports = async (req, res) => {
   const proto = (req.headers && req.headers['x-forwarded-proto']) || 'http';
   const base = `${proto}://${host}`;
   const links = {
-    edit: `${base}/?id=${session.id}&key=${editKey}&cap=1`,
-    view: `${base}/results.html?id=${session.id}&key=${viewKey}&cap=1`
+    edit: `${base}/?id=${session.id}&key=${editKey}`,
+    view: `${base}/results.html?id=${session.id}&key=${viewKey}`
   };
   res.statusCode = 201;
   res.setHeader('Content-Type', 'application/json');

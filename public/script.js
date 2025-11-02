@@ -178,8 +178,7 @@
             resultsBtn.id = 'resultsBtn';
             resultsBtn.className = 'btn-primary text-white font-bold py-4 px-8 rounded-full text-lg shadow-lg';
             resultsBtn.textContent = 'Results';
-            const capParam = params.cap === '1' ? '&cap=1' : '';
-            resultsBtn.href = `/results.html?id=${encodeURIComponent(serverSessionId)}&key=${encodeURIComponent(serverSessionKey)}${capParam}`;
+            resultsBtn.href = `/results.html?id=${encodeURIComponent(serverSessionId)}&key=${encodeURIComponent(serverSessionKey)}`;
             parent.appendChild(resultsBtn);
         }
 
@@ -448,18 +447,6 @@
             unlockApp();
         }
 
-        function onCreateSession(name) {
-            const trimmed = (name || '').trim();
-            if (!trimmed) return;
-            if (!window.SessionStore.exists(trimmed)) {
-                try { window.SessionStore.create(trimmed); } catch {}
-            }
-            if (sessionPickerHost && window.SessionPicker) {
-                window.SessionPicker.updateSessions(sessionPickerHost, window.SessionStore.getAll());
-            }
-            onOpenSession(trimmed);
-        }
-
         if (!nextBtn._boundClick) nextBtn.addEventListener('click', async () => {
             if (isAdvancing) return;
             if (!activeSession) {
@@ -691,18 +678,13 @@
         function renderSessionPickerInto(container) {
             if (container && window.SessionPicker) {
                 sessionPickerHost = container;
-                
-                // Check if we're in admin mode
-                const isAdminMode = window.location.href.includes('admin=1');
-                
-                // In admin mode, don't pass sessions yet - they'll be loaded after authentication
-                // In regular mode, use localStorage sessions
-                const sessions = isAdminMode ? [] : window.SessionStore.getAll();
-                
+
+                // Only used in admin mode - sessions will be loaded after authentication
+                const sessions = [];
+
                 window.SessionPicker.render(container, {
                     sessions: sessions,
-                    onOpen: onOpenSession,
-                    onCreate: onCreateSession,
+                    onOpen: onOpenSession
                 });
             }
         }
@@ -818,24 +800,12 @@
             // Check if we're in admin mode
             const isAdminMode = window.location.href.includes('admin=1');
 
-            // In admin mode, don't show anything - AdminUI.init() will handle it
+            // In admin mode, AdminUI.init() will handle showing the session management UI
             if (isAdminMode) {
-                // Admin flow handles its own UI via AdminUI.init()
                 return;
             }
 
-            // Regular mode flow:
-            // Show welcome screen for first-time users
-            if (!hasSeenWelcome()) {
-                showWelcomeScreen(() => {
-                    // After welcome, show create session dialog
-                    showCreateSessionDialog();
-                });
-                return;
-            }
-
-            // Regular mode: show simple "Create Session" dialog
-            showCreateSessionDialog();
+            // For regular users, lockApp() is called to hide UI while showing session creation dialog
         }
 
         function showCreateSessionDialog() {
@@ -871,6 +841,9 @@
 
             const input = dialog.querySelector('#sessionNameInput');
             const createBtn = dialog.querySelector('#createSessionBtn');
+            if (input) {
+                input.setAttribute('aria-label', 'New session name');
+            }
 
             input.addEventListener('input', () => {
                 createBtn.disabled = !input.value.trim();
@@ -880,39 +853,28 @@
                 const name = input.value.trim();
                 if (!name) return;
 
-                showLoading('Creating session...');
+                if (typeof showLoading === 'function') showLoading('Creating session...');
                 try {
-                    const res = await fetch('/api/capsessions', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ name })
-                    });
-                    
-                    if (res.ok) {
-                        const json = await res.json();
-                        const links = json && json.links;
-                        
-                        if (links && typeof links.edit === 'string' && links.edit) {
-                            hideLoading();
-                            // Show the share links dialog
-                            if (typeof window.openShareLinksDialog === 'function') {
-                                window.openShareLinksDialog(links);
-                            }
-                            // After showing links, redirect to the edit URL
-                            setTimeout(() => {
-                                window.location.href = links.edit;
-                            }, 500);
-                            return;
-                        }
-                    } else {
-                        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
-                        hideLoading();
-                        toast(`Failed to create session: ${errorData.error || 'Unknown error'}`, { type: 'error', duration: 4000 });
+                    const api = (typeof window !== 'undefined' && window.SessionApi) || {};
+                    if (typeof api.createCapabilitySession !== 'function') {
+                        throw new Error('Session API unavailable');
                     }
+                    const result = await api.createCapabilitySession(name);
+                    const links = result && result.links ? result.links : null;
+                    if (!links || !links.edit) {
+                        throw new Error('Capability link not returned');
+                    }
+                    if (typeof window.openShareLinksDialog === 'function') {
+                        window.openShareLinksDialog(links);
+                    }
+                    setTimeout(() => {
+                        window.location.href = links.edit;
+                    }, 500);
                 } catch (e) {
                     console.error('Failed to create session:', e);
-                    hideLoading();
-                    toast(`Failed to create session: ${e.message}`, { type: 'error', duration: 4000 });
+                    toast(`Failed to create session: ${e && e.message ? e.message : 'Unknown error'}`, { type: 'error', duration: 4000 });
+                } finally {
+                    if (typeof hideLoading === 'function') hideLoading();
                 }
             }
 
@@ -939,6 +901,23 @@
 
         function showSessionGate() {
             if (document.getElementById('sessionGateOverlay')) return;
+
+            // Only show in admin mode - regular users access via capability links
+            const isAdminMode = (() => {
+                try {
+                    const params = new URLSearchParams(window.location.search);
+                    return params.get('admin') === '1';
+                } catch {
+                    return false;
+                }
+            })();
+
+            if (!isAdminMode) {
+                console.error('Session gate should only be called in admin mode');
+                return;
+            }
+
+            // Admin mode: show session management panel
             const overlay = document.createElement('div');
             overlay.id = 'sessionGateOverlay';
             overlay.className = 'fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50';
@@ -983,15 +962,10 @@
                 if (e.key === 'Escape') { e.preventDefault(); }
             });
 
-            // Dynamic helper text
+            // Dynamic helper text for admin mode
             try {
                 const gateHelper = dialog.querySelector('#gateHelper');
-                const sessions = window.SessionStore.getAll();
-                if (Array.isArray(sessions) && sessions.length === 0) {
-                    gateHelper.textContent = 'Create a new session to begin.';
-                } else {
-                    gateHelper.textContent = 'Pick an existing session or create a new one to begin.';
-                }
+                gateHelper.textContent = 'Manage existing sessions or create new ones.';
             } catch {}
 
             const host = dialog.querySelector('#sessionGateHost');
@@ -1040,12 +1014,26 @@
             }
         }
         
-        // init: gate the app on load
-        if (!isServerMode) {
+        // init: determine mode on load
+        const isAdminMode = (() => {
+            try {
+                const params = new URLSearchParams(window.location.search);
+                return params.get('admin') === '1';
+            } catch {
+                return false;
+            }
+        })();
+
+        if (isServerMode) {
+            // User has capability link - load their session
+            serverLoadAndOpen();
+        } else if (isAdminMode) {
+            // Admin mode - show session management
             lockApp();
         } else {
-            // In server mode, load the remote session and unlock UI
-            serverLoadAndOpen();
+            // Regular user on homepage - prompt to create a new session
+            lockApp(); // Hide UI elements while showing creation prompt
+            showCreateSessionDialog();
         }
         if (askedContainer && window.AskedList) {
             const questionsById = new Map();
@@ -1108,18 +1096,19 @@
     }
 
     async function validateAdminKey(key) {
-        const res = await fetch('/api/admin/sessions', { headers: { Authorization: 'Key ' + key } });
-        if (!res.ok) throw new Error('Invalid');
-        return res.json().catch(() => ({}));
+        const api = (typeof window !== 'undefined' && window.SessionApi) || {};
+        if (typeof api.fetchAdminSessions !== 'function') {
+            throw new Error('Session API unavailable');
+        }
+        return api.fetchAdminSessions(key);
     }
 
     async function deleteAdminSession(id, adminKey) {
-        const res = await fetch(`/api/admin/sessions/${id}`, {
-            method: 'DELETE',
-            headers: { Authorization: 'Key ' + adminKey }
-        });
-        if (!res.ok) throw new Error('Failed to delete');
-        return res.json();
+        const api = (typeof window !== 'undefined' && window.SessionApi) || {};
+        if (typeof api.deleteAdminSession !== 'function') {
+            throw new Error('Session API unavailable');
+        }
+        return api.deleteAdminSession(id, adminKey);
     }
 
     function formatTimestamp(timestamp) {

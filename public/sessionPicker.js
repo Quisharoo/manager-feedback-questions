@@ -1,9 +1,39 @@
 (function() {
+        // SessionPicker operates in two modes:
+        // - Regular mode: Create capability sessions (redirects to ?id=...&key=... link after creation)
+        // - Admin mode (?admin=1): Manage all sessions (create/delete, view metadata)
+        //
+        // Note: localStorage sessions are kept as offline fallback only when capability creation fails.
+
+        function isAdminMode() {
+                if (typeof window === 'undefined') return false;
+                try {
+                        const params = new URLSearchParams(window.location.search);
+                        return params.get('admin') === '1';
+                } catch {
+                        return false;
+                }
+        }
+
         function ensure(container) {
                 if (!container._sessionPicker) {
-                        container._sessionPicker = { sessions: [], onOpen: function() {}, onCreate: function() {}, helperEl: null };
+                        container._sessionPicker = {
+                                sessions: [],
+                                _adminSessions: [],
+                                _adminKey: null,
+                                onOpen: function() {},
+                                onCreate: function() {},
+                                helperEl: null
+                        };
                 }
                 return container._sessionPicker;
+        }
+
+        function helperCopyForState(options) {
+                const empty = !!(options && options.empty);
+                return empty
+                        ? 'Create a new session to begin.'
+                        : 'Pick an existing session or create a new one.';
         }
 
         function filterSessions(list) {
@@ -67,92 +97,59 @@
                         const name = (input.value || '').trim();
                         if (!name) return;
 
-                        // Check if in admin mode
-                        const isAdminMode = window.location.href.includes('admin=1');
-
-                        // Always create a server session with capability key
+                        const isAdmin = isAdminMode();
+                        const api = (typeof window !== 'undefined' && window.SessionApi) || {};
+                        let shouldRedirect = false;
+                        let redirectLink = '';
                         if (window.showLoading) window.showLoading('Creating session...');
                         try {
-                                const res = await fetch('/api/capsessions', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ name })
-                                });
-                                if (res.ok) {
-                                        const json = await res.json();
-                                        const links = json && json.links;
-                                        if (links && typeof links.edit === 'string' && links.edit) {
-                                                if (window.hideLoading) window.hideLoading();
-                                                if (typeof window.openShareLinksDialog === 'function') {
-                                                        try { window.openShareLinksDialog(links); } catch (err) { console.error('share dialog failed', err); }
-                                                }
-                                                // BUG FIX #3: In admin mode, don't redirect - just show success and refresh session list
-                                                if (isAdminMode) {
-                                                        input.value = '';
-                                                        createBtn.disabled = true;
-                                                        form.classList.add('hidden');
-                                                        toggleBtn.classList.remove('hidden');
-                                                        // Refresh the admin sessions list
-                                                        try {
-                                                                const adminKey = sessionStorage.getItem('mfq_admin_key');
-                                                                if (adminKey) {
-                                                                        const res = await fetch('/api/admin/sessions', { headers: { Authorization: 'Key ' + adminKey } });
-                                                                        if (res.ok) {
-                                                                                const data = await res.json();
-                                                                                const sessions = Array.isArray(data.sessions) ? data.sessions : [];
-                                                                                SessionPicker.setAdminSessions(container, sessions, adminKey);
-                                                                                // Auto-switch to the "Existing" tab to show the new session
-                                                                                const tabExisting = container.querySelector('#tab-existing');
-                                                                                if (tabExisting && typeof tabExisting.click === 'function') {
-                                                                                        setTimeout(() => { try { tabExisting.click(); } catch {} }, 100);
-                                                                                }
-                                                                        }
-                                                                }
-                                                        } catch (e) {
-                                                                console.error('Failed to refresh sessions:', e);
-                                                        }
-                                                        // Show success message after the share dialog closes
-                                                        setTimeout(() => {
-                                                                if (window.toast) window.toast('Session created! It now appears in the Existing tab. Remember to save the capability link!', { type: 'success', duration: 4000 });
-                                                        }, 500);
-                                                        return;
-                                                }
-                                                window.location.href = links.edit;
-                                                return;
-                                        }
-                                        if (json && typeof json.url === 'string' && json.url) {
-                                                if (window.hideLoading) window.hideLoading();
-                                                // In admin mode, don't redirect
-                                                if (isAdminMode) {
-                                                        if (window.toast) window.toast('Session created successfully', { type: 'success' });
-                                                        input.value = '';
-                                                        createBtn.disabled = true;
-                                                        form.classList.add('hidden');
-                                                        toggleBtn.classList.remove('hidden');
-                                                        return;
-                                                }
-                                                window.location.href = json.url;
-                                                return;
-                                        }
-                                        // Unexpected success payload; treat as failure to avoid silent misbehaviour
-                                        if (window.toast) window.toast('Failed to create session on server: unexpected response. Creating local session instead.', { type: 'error', duration: 4000 });
-                                } else {
-                                        // Show error message to user
-                                        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
-                                        if (window.toast) window.toast(`Failed to create session on server: ${errorData.error || 'Unknown error'}. Creating local session instead.`, { type: 'error', duration: 4000 });
+                                if (typeof api.createCapabilitySession !== 'function') {
+                                        throw new Error('Session API unavailable');
                                 }
-                        } catch (e) {
-                                console.error('Failed to create session:', e);
-                                if (window.toast) window.toast(`Failed to create session on server: ${e.message}. Creating local session instead.`, { type: 'error', duration: 4000 });
+                                const result = await api.createCapabilitySession(name);
+                                const links = result && result.links ? result.links : null;
+                                if (!links || !links.edit) {
+                                        throw new Error('Capability link not returned');
+                                }
+                                if (typeof window.openShareLinksDialog === 'function') {
+                                        try { window.openShareLinksDialog(links); } catch (err) { console.error('share dialog failed', err); }
+                                }
+                                if (isAdmin) {
+                                        try {
+                                                const adminKey = sessionStorage.getItem('mfq_admin_key');
+                                                if (adminKey && typeof api.fetchAdminSessions === 'function') {
+                                                        const data = await api.fetchAdminSessions(adminKey);
+                                                        const sessions = Array.isArray(data.sessions) ? data.sessions : [];
+                                                        SessionPicker.setAdminSessions(container, sessions, adminKey);
+                                                        const tabExisting = container.querySelector('#tab-existing');
+                                                        if (tabExisting && typeof tabExisting.click === 'function') {
+                                                                setTimeout(() => { try { tabExisting.click(); } catch {} }, 100);
+                                                        }
+                                                }
+                                        } catch (refreshErr) {
+                                                console.error('Failed to refresh sessions:', refreshErr);
+                                                if (window.toast) window.toast('Session created, but failed to refresh admin list.', { type: 'error', duration: 4000 });
+                                        }
+                                        if (window.toast) {
+                                                window.toast('Session created! It now appears in the Existing tab. Remember to save the capability link!', { type: 'success', duration: 4000 });
+                                        }
+                                } else {
+                                        shouldRedirect = true;
+                                        redirectLink = links.edit;
+                                }
+                        } catch (err) {
+                                console.error('Failed to create session:', err);
+                                if (window.toast) window.toast(`Failed to create session: ${err && err.message ? err.message : 'Unknown error'}`, { type: 'error', duration: 4000 });
                         } finally {
                                 if (window.hideLoading) window.hideLoading();
+                                input.value = '';
+                                createBtn.disabled = true;
+                                form.classList.add('hidden');
+                                toggleBtn.classList.remove('hidden');
+                                if (shouldRedirect && redirectLink) {
+                                        window.location.href = redirectLink;
+                                }
                         }
-                        // Fallback to local session if server creation fails
-                        state.onCreate && state.onCreate(name);
-                        input.value = '';
-                        createBtn.disabled = true;
-                        form.classList.add('hidden');
-                        toggleBtn.classList.remove('hidden');
                 });
 
                 area.appendChild(toggleBtn);
@@ -161,22 +158,20 @@
         }
 
         const SessionPicker = {
-                render(container, { sessions = [], onOpen, onCreate } = {}) {
+                render(container, { sessions = [], onOpen } = {}) {
                         const state = ensure(container);
                         state.sessions = filterSessions(sessions);
                         state.onOpen = typeof onOpen === 'function' ? onOpen : function() {};
-                        state.onCreate = typeof onCreate === 'function' ? onCreate : function() {};
 
                         container.innerHTML = '';
                         const card = document.createElement('div');
                         card.className = 'bg-white rounded-xl shadow p-4';
 
-                        // Check if admin mode - use URL param as source of truth
-                        const isAdminMode = (typeof window !== 'undefined' && window.location.href.includes('admin=1'));
-                        const hasAdminSessions = state._adminSessions && Array.isArray(state._adminSessions);
+                        const isAdmin = isAdminMode();
+                        const hasAdminSessions = Array.isArray(state._adminSessions) && state._adminSessions.length > 0;
 
                         // Add admin mode banner at the top
-                        if (isAdminMode) {
+                        if (isAdmin) {
                                 const banner = document.createElement('div');
                                 banner.className = 'mb-4 bg-blue-50 border-l-4 border-blue-500 p-3 rounded';
                                 banner.innerHTML = `
@@ -228,8 +223,7 @@
                         select.id = 'sessionSelect';
 
                         // In admin mode, add visual indication that sessions are locked
-                        // Use the same isAdminMode variable defined at the top of the render function
-                        const selectClass = isAdminMode
+                        const selectClass = isAdmin
                                 ? 'flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-gray-50'
                                 : 'flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400';
                         select.className = selectClass;
@@ -267,8 +261,7 @@
                         openBtn.textContent = 'Open session';
                         openBtn.disabled = true;
                         // In admin mode, hide open button entirely (sessions can only be accessed via capability links)
-                        // isAdminMode is already defined at the top of this render function
-                        if (isAdminMode) {
+                        if (isAdmin) {
                                 openBtn.style.display = 'none';
                         }
                         const deleteBtn = document.createElement('button');
@@ -278,13 +271,13 @@
                         deleteBtn.textContent = 'Delete';
                         deleteBtn.disabled = true;
                         select.addEventListener('change', () => {
-                                if (!isAdminMode) {
+                                if (!isAdmin) {
                                         openBtn.disabled = !select.value;
                                 }
                         });
                         select.addEventListener('change', () => { deleteBtn.disabled = !select.value; });
                         openBtn.addEventListener('click', () => {
-                                if (isAdminMode) {
+                                if (isAdmin) {
                                         // Show error toast in admin mode
                                         if (window.toast) {
                                                 window.toast('Sessions can only be accessed via their unique capability link. Use the share link shown when you created the session.', { type: 'error', duration: 5000 });
@@ -298,7 +291,7 @@
                                 if (e.key === 'Enter' && select.value) { e.preventDefault(); openBtn.click(); }
                         });
                         // In admin mode, add lock icon before select
-                        if (isAdminMode) {
+                        if (isAdmin) {
                                 const lockIcon = document.createElement('span');
                                 lockIcon.className = 'text-gray-500 text-sm';
                                 lockIcon.innerHTML = '<i class="fas fa-lock"></i>';
@@ -475,71 +468,57 @@
                                 const name = (input.value || '').trim();
                                 if (!name) return;
 
-                                // Check if in admin mode
-                                const isAdminMode = window.location.href.includes('admin=1');
-
-                                // Always create a server session with capability key
+                                const isAdmin = isAdminMode();
+                                const api = (typeof window !== 'undefined' && window.SessionApi) || {};
+                                let shouldRedirect = false;
+                                let redirectLink = '';
                                 if (window.showLoading) window.showLoading('Creating session...');
-				try {
-					const res = await fetch('/api/capsessions', {
-						method: 'POST',
-						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({ name })
-					});
-					if (res.ok) {
-						const json = await res.json();
-						const links = json && json.links;
-						const editUrl = links && typeof links.edit === 'string' ? links.edit : (json && typeof json.url === 'string' ? json.url : '');
-						if (links && typeof window.openShareLinksDialog === 'function') {
-							try { window.openShareLinksDialog(links); } catch (err) { console.error('share dialog failed', err); }
-						}
-						if (editUrl) {
-							if (window.hideLoading) window.hideLoading();
-							if (isAdminMode) {
-								input.value = '';
-								createBtn.disabled = true;
-								try {
-									const adminKey = sessionStorage.getItem('mfq_admin_key');
-									if (adminKey) {
-										const adminRes = await fetch('/api/admin/sessions', { headers: { Authorization: 'Key ' + adminKey } });
-										if (adminRes.ok) {
-											const data = await adminRes.json();
-											const sessions = Array.isArray(data.sessions) ? data.sessions : [];
-											SessionPicker.setAdminSessions(container, sessions, adminKey);
-											const tabExisting = container.querySelector('#tab-existing');
-											if (tabExisting && typeof tabExisting.click === 'function') {
-												setTimeout(() => { try { tabExisting.click(); } catch {} }, 100);
-											}
-										}
-									}
-								} catch (e) {
-									console.error('Failed to refresh sessions:', e);
-								}
-								setTimeout(() => {
-									if (window.toast) {
-										window.toast('Session created! It now appears in the Existing tab. Remember to save the capability link!', { type: 'success', duration: 4000 });
-									}
-								}, 500);
-								return;
-							}
-							window.location.href = editUrl;
-							return;
-						}
-					} else {
-						// Show error message to user
-						const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
-						if (window.toast) window.toast(`Failed to create session on server: ${errorData.error || 'Unknown error'}. Creating local session instead.`, { type: 'error', duration: 4000 });
-					}
-				} catch (e) {
-                                        console.error('Failed to create session:', e);
-                                        if (window.toast) window.toast(`Failed to create session on server: ${e.message}. Creating local session instead.`, { type: 'error', duration: 4000 });
+                                try {
+                                        if (typeof api.createCapabilitySession !== 'function') {
+                                                throw new Error('Session API unavailable');
+                                        }
+                                        const result = await api.createCapabilitySession(name);
+                                        const links = result && result.links ? result.links : null;
+                                        if (!links || !links.edit) {
+                                                throw new Error('Capability link not returned');
+                                        }
+                                        if (typeof window.openShareLinksDialog === 'function') {
+                                                try { window.openShareLinksDialog(links); } catch (err) { console.error('share dialog failed', err); }
+                                        }
+                                        if (isAdmin) {
+                                                try {
+                                                        const adminKey = sessionStorage.getItem('mfq_admin_key');
+                                                        if (adminKey && typeof api.fetchAdminSessions === 'function') {
+                                                                const data = await api.fetchAdminSessions(adminKey);
+                                                                const sessions = Array.isArray(data.sessions) ? data.sessions : [];
+                                                                SessionPicker.setAdminSessions(container, sessions, adminKey);
+                                                                const tabExisting = container.querySelector('#tab-existing');
+                                                                if (tabExisting && typeof tabExisting.click === 'function') {
+                                                                        setTimeout(() => { try { tabExisting.click(); } catch {} }, 100);
+                                                                }
+                                                        }
+                                                } catch (refreshErr) {
+                                                        console.error('Failed to refresh sessions:', refreshErr);
+                                                        if (window.toast) window.toast('Session created, but failed to refresh admin list.', { type: 'error', duration: 4000 });
+                                                }
+                                                if (window.toast) {
+                                                        window.toast('Session created! It now appears in the Existing tab. Remember to save the capability link!', { type: 'success', duration: 4000 });
+                                                }
+                                        } else {
+                                                shouldRedirect = true;
+                                                redirectLink = links.edit;
+                                        }
+                                } catch (err) {
+                                        console.error('Failed to create session:', err);
+                                        if (window.toast) window.toast(`Failed to create session: ${err && err.message ? err.message : 'Unknown error'}`, { type: 'error', duration: 4000 });
                                 } finally {
                                         if (window.hideLoading) window.hideLoading();
+                                        input.value = '';
+                                        createBtn.disabled = true;
+                                        if (shouldRedirect && redirectLink) {
+                                                window.location.href = redirectLink;
+                                        }
                                 }
-                                // Fallback to local session if server creation fails
-                                state.onCreate && state.onCreate(name);
-                                input.value = '';
-                                createBtn.disabled = true;
                         }
                         createBtn.addEventListener('click', submitCreate);
                         input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !createBtn.disabled) { e.preventDefault(); submitCreate(); } });
@@ -550,7 +529,7 @@
                         const helper = document.createElement('div');
                         helper.className = 'text-xs text-gray-500 mt-2';
                         helper.id = 'sessionPickerHelper';
-                        helper.textContent = 'Pick an existing session or create a new one.';
+                        helper.textContent = helperCopyForState({ empty: false });
                         state.helperEl = helper;
 
                         // Tab interactions
@@ -589,19 +568,19 @@
                                 tabExisting.classList.add('hidden');
                                 panelExisting.classList.add('hidden');
                                 activate('new');
-                                helper.textContent = 'Create a new session to begin.';
+                                helper.textContent = helperCopyForState({ empty: true });
                                 setTimeout(() => { try { input.focus(); } catch {} }, 0);
                         } else {
                                 // show Existing tab
                                 tabExisting.classList.remove('hidden');
                                 activate('existing');
-                                helper.textContent = 'Pick an existing session or create a new one.';
+                                helper.textContent = helperCopyForState({ empty: false });
                         }
                 },
 		updateSessions(container, sessions) {
 			const state = ensure(container);
-			// When admin sessions are present, avoid clobbering the server-backed list with local storage data.
-			if (state._adminKey || Array.isArray(state._adminSessions)) {
+			// Admin mode owns the session list entirely; skip local updates to avoid clobbering server data.
+			if (state._adminKey) {
 				return;
 			}
 			state.sessions = filterSessions(sessions);
@@ -628,7 +607,7 @@
                         const panelExisting = container.querySelector('[role="tabpanel"][aria-labelledby="tab-existing"]');
                         const panelNew = container.querySelector('[role="tabpanel"][aria-labelledby="tab-new"]');
                         if (state.sessions.length === 0) {
-                                if (helper) helper.textContent = 'Create a new session to begin.';
+                                if (helper) helper.textContent = helperCopyForState({ empty: true });
                                 if (tabExisting) tabExisting.classList.add('hidden');
                                 if (panelExisting) panelExisting.classList.add('hidden');
                                 if (tabNew) {
@@ -637,7 +616,7 @@
                                 }
                                 if (panelNew) panelNew.classList.remove('hidden');
                         } else {
-                                if (helper) helper.textContent = 'Pick an existing session or create a new one.';
+                                if (helper) helper.textContent = helperCopyForState({ empty: false });
                                 if (tabExisting) tabExisting.classList.remove('hidden');
                         }
                 },

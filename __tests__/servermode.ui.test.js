@@ -6,9 +6,9 @@ describe('Server-mode UI: answers load and persist with unique link', () => {
   const FIRST_Q = "Am I giving you enough information to do your job well?";
 
   beforeEach(() => {
-    // Reset DOM and URL to include cap session params
+    // Reset DOM and URL to include capability session params
     document.body.innerHTML = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
-    window.history.pushState({}, '', '/?id=test-session-1&key=test-key-1&cap=1');
+    window.history.pushState({}, '', '/?id=test-session-1&key=test-key-1');
     jest.resetModules();
 
     // Deterministic next question selection: pick first remaining
@@ -46,6 +46,7 @@ describe('Server-mode UI: answers load and persist with unique link', () => {
     require('../public/sessionStore');
     require('../public/selectionUtils');
     require('../public/askedList');
+    require('../public/sessionApi');
     require('../public/sessionPicker');
     require('../public/script');
   });
@@ -129,5 +130,4 @@ describe('Server-mode UI: answers load and persist with unique link', () => {
     expect(resetCall).toBeTruthy();
   });
 });
-
 

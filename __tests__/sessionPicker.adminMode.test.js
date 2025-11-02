@@ -27,7 +27,7 @@ describe('SessionPicker admin mode button visibility', () => {
 
     const openBtn = document.getElementById('openSessionBtn');
     expect(openBtn).toBeTruthy();
-    
+
     // The button should be hidden via display: none
     expect(openBtn.style.display).toBe('none');
   });
@@ -50,7 +50,7 @@ describe('SessionPicker admin mode button visibility', () => {
 
     const openBtn = document.getElementById('openSessionBtn');
     expect(openBtn).toBeTruthy();
-    
+
     // The button should NOT be hidden
     expect(openBtn.style.display).not.toBe('none');
   });
