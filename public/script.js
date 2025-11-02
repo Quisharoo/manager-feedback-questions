@@ -61,6 +61,59 @@
         let isAdvancing = false;
         let resetUndoTimer = null;
 
+        // Global toast notification system
+        function toast(msg, options = {}) {
+            const duration = options.duration || 2500;
+            const type = options.type || 'default'; // 'default', 'success', 'error'
+            const t = document.createElement('div');
+
+            let bgClass = 'bg-gray-900';
+            let icon = '';
+            if (type === 'success') {
+                bgClass = 'bg-green-600';
+                icon = '<i class="fas fa-check-circle mr-2"></i>';
+            } else if (type === 'error') {
+                bgClass = 'bg-red-600';
+                icon = '<i class="fas fa-exclamation-circle mr-2"></i>';
+            }
+
+            t.className = `fixed bottom-6 left-1/2 -translate-x-1/2 ${bgClass} text-white text-sm px-4 py-2 rounded-lg shadow-lg flex items-center z-50 animate-slide-up`;
+            t.innerHTML = `${icon}<span>${msg}</span>`;
+            t.setAttribute('role', 'status');
+            t.setAttribute('aria-live', 'polite');
+            document.body.appendChild(t);
+            setTimeout(() => {
+                t.style.opacity = '0';
+                t.style.transform = 'translateX(-50%) translateY(10px)';
+                t.style.transition = 'all 0.3s ease';
+                setTimeout(() => t.remove(), 300);
+            }, duration);
+        }
+        window.toast = toast; // Make available globally
+
+        // Loading state management
+        let loadingOverlay = null;
+        function showLoading(message = 'Loading...') {
+            if (loadingOverlay) return; // Prevent multiple overlays
+            loadingOverlay = document.createElement('div');
+            loadingOverlay.className = 'loading-overlay';
+            loadingOverlay.innerHTML = `
+                <div class="bg-white rounded-lg p-6 shadow-xl flex flex-col items-center">
+                    <div class="loading-spinner-large mb-3"></div>
+                    <div class="text-gray-700 text-sm">${message}</div>
+                </div>
+            `;
+            document.body.appendChild(loadingOverlay);
+        }
+        function hideLoading() {
+            if (loadingOverlay) {
+                loadingOverlay.remove();
+                loadingOverlay = null;
+            }
+        }
+        window.showLoading = showLoading;
+        window.hideLoading = hideLoading;
+
         function getUrlParams() {
             try {
                 const u = new URL(window.location.href);
@@ -170,6 +223,7 @@
         }
 
         async function serverLoadAndOpen() {
+            showLoading('Loading session...');
             try {
                 const data = await apiGetCapSession(serverSessionId, serverSessionKey);
                 const askedIds = mapAskedToIds(data.asked || []);
@@ -232,6 +286,9 @@
                 unlockApp();
             } catch (e) {
                 console.error('Failed to load server session');
+                toast('Failed to load session', { type: 'error' });
+            } finally {
+                hideLoading();
             }
         }
 
@@ -334,6 +391,18 @@
 
         async function onOpenSession(name) {
             if (!name) return;
+
+            // BUG FIX #1: In admin mode, sessions cannot be "opened" without capability keys
+            // The capability keys are only shown once at creation and cannot be recovered
+            const isAdminMode = window.location.href.includes('admin=1');
+            if (isAdminMode) {
+                toast('Sessions can only be accessed via their unique capability link. Please use the share link shown when you created the session.', {
+                    type: 'error',
+                    duration: 5000
+                });
+                return;
+            }
+
             if (isServerMode) {
                 activeSession = activeSession && activeSession.name ? activeSession : { name, askedIds: [], timestamps: [] };
                 window.__activeSessionName = name;
@@ -630,6 +699,99 @@
             }
         }
 
+        // Check if user has seen welcome screen
+        function hasSeenWelcome() {
+            // Skip welcome screen in test environment
+            if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'test') {
+                return true;
+            }
+            // Skip welcome screen in admin mode
+            try {
+                const u = new URL(window.location.href);
+                if (u.searchParams.get('admin') === '1') {
+                    return true;
+                }
+            } catch {}
+            try {
+                return localStorage.getItem('mfq_seen_welcome') === 'true';
+            } catch {
+                return false;
+            }
+        }
+        function markWelcomeSeen() {
+            try {
+                localStorage.setItem('mfq_seen_welcome', 'true');
+            } catch {}
+        }
+
+        function showWelcomeScreen(onContinue) {
+            const overlay = document.createElement('div');
+            overlay.id = 'welcomeOverlay';
+            overlay.className = 'fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50';
+            const dialog = document.createElement('div');
+            dialog.className = 'bg-white rounded-xl p-6 w-full max-w-lg shadow-2xl';
+            dialog.setAttribute('role', 'dialog');
+            dialog.setAttribute('aria-modal', 'true');
+            dialog.setAttribute('aria-labelledby', 'welcomeTitle');
+            dialog.tabIndex = -1;
+            dialog.innerHTML = `
+                <div class="text-center mb-6">
+                    <div class="text-indigo-600 text-5xl mb-4">
+                        <i class="fas fa-comments"></i>
+                    </div>
+                    <h2 id="welcomeTitle" class="text-2xl font-bold text-gray-900 mb-2">Welcome to Manager Feedback Questions</h2>
+                    <p class="text-gray-600">Your companion for better 1-on-1 conversations</p>
+                </div>
+                <div class="space-y-4 mb-6 text-left">
+                    <div class="flex items-start gap-3">
+                        <div class="text-indigo-600 text-xl mt-1"><i class="fas fa-question-circle"></i></div>
+                        <div>
+                            <h3 class="font-semibold text-gray-900">Curated Questions</h3>
+                            <p class="text-sm text-gray-600">Get thoughtful questions across 7 themes to improve team dynamics</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <div class="text-indigo-600 text-xl mt-1"><i class="fas fa-folder"></i></div>
+                        <div>
+                            <h3 class="font-semibold text-gray-900">Track Sessions</h3>
+                            <p class="text-sm text-gray-600">Create separate sessions for each team member or meeting</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <div class="text-indigo-600 text-xl mt-1"><i class="fas fa-history"></i></div>
+                        <div>
+                            <h3 class="font-semibold text-gray-900">Never Repeat</h3>
+                            <p class="text-sm text-gray-600">Questions are tracked so you won't see the same one twice</p>
+                        </div>
+                    </div>
+                </div>
+                <button id="welcomeContinueBtn" class="btn-primary w-full text-white font-semibold py-3 px-6 rounded-lg">
+                    Get Started
+                </button>
+            `;
+            overlay.appendChild(dialog);
+            document.body.appendChild(overlay);
+
+            const prevOverflow = document.body.style.overflow;
+            const prevPaddingRight = document.body.style.paddingRight;
+            const scrollBarWidth = window.innerWidth - document.documentElement.clientWidth;
+            if (scrollBarWidth > 0) {
+                document.body.style.paddingRight = String(scrollBarWidth) + 'px';
+            }
+            document.body.style.overflow = 'hidden';
+
+            const continueBtn = dialog.querySelector('#welcomeContinueBtn');
+            continueBtn.addEventListener('click', () => {
+                overlay.remove();
+                document.body.style.overflow = prevOverflow;
+                document.body.style.paddingRight = prevPaddingRight;
+                markWelcomeSeen();
+                if (typeof onContinue === 'function') onContinue();
+            });
+
+            setTimeout(() => { try { continueBtn.focus(); } catch {} }, 100);
+        }
+
         function lockApp() {
             try {
                 if (askedContainer) askedContainer.classList.add('hidden');
@@ -640,9 +802,24 @@
                 if (resultsBtn) resultsBtn.classList.add('hidden');
                 const adminFab = document.getElementById('adminCreateBtn');
                 if (adminFab) adminFab.classList.add('hidden');
+                const adminSessionsBtn = document.getElementById('adminSessionsBtn');
+                if (adminSessionsBtn) adminSessionsBtn.classList.add('hidden');
                 if (questionCard) questionCard.classList.add('hidden');
             } catch {}
 
+            // Show welcome screen for first-time users
+            if (!hasSeenWelcome()) {
+                showWelcomeScreen(() => {
+                    // After welcome, show session gate
+                    showSessionGate();
+                });
+                return;
+            }
+
+            showSessionGate();
+        }
+
+        function showSessionGate() {
             if (document.getElementById('sessionGateOverlay')) return;
             const overlay = document.createElement('div');
             overlay.id = 'sessionGateOverlay';
@@ -722,8 +899,21 @@
                 if (resetBtn) resetBtn.classList.remove('hidden');
                 ensureResultsButton();
                 if (resultsBtn) resultsBtn.classList.remove('hidden');
-                // Admin controls removed - now integrated with session picker
                 if (questionCard) questionCard.classList.remove('hidden');
+                // BUG FIX #2: Keep admin sessions button visible if in admin mode
+                const isAdminMode = window.location.href.includes('admin=1');
+                const adminSessionsBtn = document.getElementById('adminSessionsBtn');
+                if (adminSessionsBtn) {
+                    if (isAdminMode) {
+                        // Ensure button stays visible in admin mode
+                        adminSessionsBtn.classList.remove('hidden');
+                        adminSessionsBtn.style.display = 'block';
+                        adminSessionsBtn.style.visibility = 'visible';
+                    } else {
+                        // Hide in non-admin mode
+                        adminSessionsBtn.classList.add('hidden');
+                    }
+                }
             } catch {}
             const overlay = document.getElementById('sessionGateOverlay');
             if (overlay) {
@@ -913,18 +1103,46 @@
                 const sessionItem = btn.closest('.p-3');
                 const sessionName = sessionItem.querySelector('.text-sm').textContent;
 
-                if (!confirm(`Delete session "${sessionName}"?\n\nThis cannot be undone.`)) return;
+                // Create confirmation dialog
+                const confirmOverlay = document.createElement('div');
+                confirmOverlay.className = 'fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50';
+                const confirmDialog = document.createElement('div');
+                confirmDialog.className = 'bg-white rounded-lg p-4 w-full max-w-sm shadow-lg';
+                confirmDialog.setAttribute('role', 'dialog');
+                confirmDialog.setAttribute('aria-modal', 'true');
+                confirmDialog.innerHTML = `
+                    <h2 class="text-sm font-semibold mb-2">Delete session</h2>
+                    <div class="text-sm mb-3">Delete session "${escapeHtml(sessionName)}"? This cannot be undone.</div>
+                    <div class="flex justify-end gap-2">
+                        <button id="adminDeleteCancel" class="px-3 py-1 border border-gray-300 rounded">Cancel</button>
+                        <button id="adminDeleteConfirm" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded">Delete</button>
+                    </div>
+                `;
+                confirmOverlay.appendChild(confirmDialog);
+                document.body.appendChild(confirmOverlay);
 
-                try {
-                    await deleteAdminSession(sessionId, adminKey);
-                    toast('Session deleted');
-                    // Refresh the panel
-                    const json = await validateAdminKey(adminKey);
-                    showAdminSessionsPanel(json.sessions || [], adminKey);
-                } catch (err) {
-                    toast('Failed to delete session');
-                    console.error('Delete failed:', err);
-                }
+                const cancelBtn = confirmDialog.querySelector('#adminDeleteCancel');
+                const confirmBtn = confirmDialog.querySelector('#adminDeleteConfirm');
+
+                cancelBtn.addEventListener('click', () => confirmOverlay.remove());
+                confirmBtn.addEventListener('click', async () => {
+                    confirmOverlay.remove();
+                    showLoading('Deleting session...');
+                    try {
+                        await deleteAdminSession(sessionId, adminKey);
+                        toast('Session deleted', { type: 'success' });
+                        // Refresh the panel
+                        const json = await validateAdminKey(adminKey);
+                        showAdminSessionsPanel(json.sessions || [], adminKey);
+                    } catch (err) {
+                        toast('Failed to delete session', { type: 'error' });
+                        console.error('Delete failed:', err);
+                    } finally {
+                        hideLoading();
+                    }
+                });
+
+                setTimeout(() => { try { cancelBtn.focus(); } catch {} }, 0);
             });
         });
     }
@@ -937,9 +1155,9 @@
 
     function openShareLinksDialog(links) {
         const overlay = document.createElement('div');
-        overlay.className = 'fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50';
+        overlay.className = 'fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50';
         const dialog = document.createElement('div');
-        dialog.className = 'bg-white rounded-lg p-4 w-full max-w-lg shadow-lg';
+        dialog.className = 'bg-white rounded-xl p-6 w-full max-w-xl shadow-2xl border-4 border-amber-400';
         dialog.setAttribute('role', 'dialog');
         dialog.setAttribute('aria-modal', 'true');
         dialog.setAttribute('aria-labelledby', 'shareTitle');
@@ -947,22 +1165,53 @@
         const editLink = (links && links.edit) || '';
         const viewLink = (links && links.view) || '';
         dialog.innerHTML = `
-            <h2 id="shareTitle" class="text-sm font-semibold mb-2">Share links</h2>
-            <div class="text-xs text-gray-600 mb-3">Copy and share the appropriate link.</div>
-            <label class="block text-xs text-gray-700 mb-1">Edit link (full access)</label>
-            <div class="flex gap-2 mb-2">
-                <input id="shareEditInput" class="flex-1 w-full border border-gray-300 rounded px-2 py-1 text-xs" value="${editLink.replace(/"/g, '&quot;')}">
-                <button id="copyEdit" class="px-2 py-1 text-xs btn-primary text-white rounded">Copy</button>
-                <a id="openEdit" class="px-2 py-1 text-xs border border-gray-300 rounded" href="${editLink}" target="_blank" rel="noopener">Open</a>
+            <div class="text-center mb-4">
+                <div class="inline-block bg-amber-100 rounded-full p-3 mb-3">
+                    <i class="fas fa-exclamation-triangle text-amber-600 text-3xl"></i>
+                </div>
+                <h2 id="shareTitle" class="text-xl font-bold text-gray-900 mb-2">Session Created Successfully!</h2>
+                <div class="bg-amber-50 border-l-4 border-amber-500 p-3 rounded text-left">
+                    <p class="text-sm font-semibold text-amber-900 flex items-center gap-2">
+                        <i class="fas fa-info-circle"></i>
+                        IMPORTANT: Save these links now!
+                    </p>
+                    <p class="text-xs text-amber-800 mt-1">
+                        These capability links cannot be recovered. Copy and save them before closing this dialog.
+                    </p>
+                </div>
             </div>
-            <label class="block text-xs text-gray-700 mb-1 mt-3">View-only link</label>
+            <label class="block text-sm font-semibold text-gray-900 mb-2">
+                <i class="fas fa-edit mr-1 text-indigo-600"></i> Edit Link (Full Access)
+            </label>
             <div class="flex gap-2 mb-4">
-                <input id="shareViewInput" class="flex-1 w-full border border-gray-300 rounded px-2 py-1 text-xs" value="${viewLink.replace(/"/g, '&quot;')}">
-                <button id="copyView" class="px-2 py-1 text-xs btn-primary text-white rounded">Copy</button>
-                <a id="openView" class="px-2 py-1 text-xs border border-gray-300 rounded" href="${viewLink}" target="_blank" rel="noopener">Open</a>
+                <input id="shareEditInput" class="flex-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:border-indigo-500 focus:outline-none" value="${editLink.replace(/"/g, '&quot;')}" readonly>
+                <button id="copyEdit" class="px-4 py-2 text-sm btn-primary text-white rounded-lg font-semibold hover:shadow-lg transition-all">
+                    <i class="fas fa-copy mr-1"></i> Copy
+                </button>
+                <a id="openEdit" class="px-4 py-2 text-sm border-2 border-gray-300 rounded-lg hover:bg-gray-50 transition-all flex items-center" href="${editLink}" target="_blank" rel="noopener">
+                    <i class="fas fa-external-link-alt"></i>
+                </a>
             </div>
-            <div class="flex justify-end gap-2">
-                <button id="shareClose" class="px-3 py-1 border border-gray-300 rounded">Close</button>
+            <label class="block text-sm font-semibold text-gray-900 mb-2">
+                <i class="fas fa-eye mr-1 text-green-600"></i> View-Only Link
+            </label>
+            <div class="flex gap-2 mb-5">
+                <input id="shareViewInput" class="flex-1 w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:border-indigo-500 focus:outline-none" value="${viewLink.replace(/"/g, '&quot;')}" readonly>
+                <button id="copyView" class="px-4 py-2 text-sm btn-primary text-white rounded-lg font-semibold hover:shadow-lg transition-all">
+                    <i class="fas fa-copy mr-1"></i> Copy
+                </button>
+                <a id="openView" class="px-4 py-2 text-sm border-2 border-gray-300 rounded-lg hover:bg-gray-50 transition-all flex items-center" href="${viewLink}" target="_blank" rel="noopener">
+                    <i class="fas fa-external-link-alt"></i>
+                </a>
+            </div>
+            <div class="border-t pt-4 flex items-center justify-between gap-3">
+                <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                    <input type="checkbox" id="confirmSaved" class="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                    <span>I've saved these links</span>
+                </label>
+                <button id="shareClose" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all" disabled>
+                    Close
+                </button>
             </div>
         `;
         overlay.appendChild(dialog);
@@ -982,19 +1231,53 @@
             const input = dialog.querySelector(inputId);
             if (!btn || !input) return;
             btn.addEventListener('click', async () => {
+                const originalText = btn.innerHTML;
                 try {
                     await navigator.clipboard.writeText(input.value || '');
-                    toast('Copied');
+                    // Success animation
+                    btn.innerHTML = '<i class="fas fa-check mr-1"></i> Copied!';
+                    btn.classList.add('bg-green-600');
+                    toast('Link copied to clipboard', { type: 'success' });
+                    setTimeout(() => {
+                        btn.innerHTML = originalText;
+                        btn.classList.remove('bg-green-600');
+                    }, 2000);
                 } catch {
-                    try { input.select(); document.execCommand('copy'); toast('Copied'); } catch {}
+                    try {
+                        input.select();
+                        document.execCommand('copy');
+                        btn.innerHTML = '<i class="fas fa-check mr-1"></i> Copied!';
+                        btn.classList.add('bg-green-600');
+                        toast('Link copied to clipboard', { type: 'success' });
+                        setTimeout(() => {
+                            btn.innerHTML = originalText;
+                            btn.classList.remove('bg-green-600');
+                        }, 2000);
+                    } catch {}
                 }
             });
         }
         bindCopy('#copyEdit', '#shareEditInput');
         bindCopy('#copyView', '#shareViewInput');
+
+        // Enable close button only when checkbox is checked
         const closeBtn = dialog.querySelector('#shareClose');
+        const checkbox = dialog.querySelector('#confirmSaved');
+        if (checkbox && closeBtn) {
+            checkbox.addEventListener('change', () => {
+                closeBtn.disabled = !checkbox.checked;
+            });
+        }
+
         closeBtn.addEventListener('click', () => close());
-        setTimeout(() => { try { dialog.focus(); } catch {} }, 0);
+
+        // Auto-select first input for easy copying
+        setTimeout(() => {
+            try {
+                const editInput = dialog.querySelector('#shareEditInput');
+                if (editInput) editInput.focus();
+            } catch {}
+        }, 100);
     }
 
     function openCreateServerSessionDialog(adminKey) {
@@ -1034,6 +1317,7 @@
         confirmBtn.addEventListener('click', async () => {
             const name = (input.value || '').trim();
             if (!name) return;
+            showLoading('Creating session...');
             try {
                 const res = await fetch('/api/admin/sessions', {
                     method: 'POST',
@@ -1042,7 +1326,9 @@
                 });
                 if (!res.ok) throw new Error('Failed');
                 const json = await res.json();
+                hideLoading();
                 close();
+                toast('Session created successfully', { type: 'success' });
                 if (json && json.links) openShareLinksDialog(json.links);
                 // Refresh the sessions list
                 try {
@@ -1053,7 +1339,8 @@
                     console.error('Failed to refresh sessions:', e);
                 }
             } catch {
-                toast('Failed to create');
+                hideLoading();
+                toast('Failed to create session', { type: 'error' });
             }
         });
         setTimeout(() => { try { input.focus(); } catch {} }, 0);
@@ -1064,6 +1351,45 @@
         const sessionSection = document.getElementById('session-section');
         if (sessionSection && window.SessionPicker) {
             window.SessionPicker.setAdminSessions(sessionSection, sessions, adminKey);
+        }
+
+        // BUG FIX #2: Show the admin sessions button in the header
+        const adminSessionsBtn = document.getElementById('adminSessionsBtn');
+        if (adminSessionsBtn) {
+            // Use setProperty with !important to override Tailwind's !important
+            adminSessionsBtn.style.setProperty('display', 'inline-block', 'important');
+            adminSessionsBtn.classList.remove('hidden');
+
+            // Remove existing event listener if any
+            const newBtn = adminSessionsBtn.cloneNode(true);
+            adminSessionsBtn.parentNode.replaceChild(newBtn, adminSessionsBtn);
+
+            // Ensure visibility on the new button too
+            newBtn.style.setProperty('display', 'inline-block', 'important');
+            newBtn.classList.remove('hidden');
+
+            // Add click handler to reopen session picker
+            newBtn.addEventListener('click', () => {
+                showAdminSessionPicker(adminKey);
+            });
+        }
+    }
+
+    async function showAdminSessionPicker(adminKey) {
+        // Refresh sessions list from server
+        showLoading('Loading sessions...');
+        try {
+            const json = await validateAdminKey(adminKey);
+            const sessions = Array.isArray(json.sessions) ? json.sessions : [];
+            hideLoading();
+
+            // Show the session gate with updated sessions
+            lockApp();
+            loadAdminSessions(adminKey, sessions);
+        } catch (e) {
+            hideLoading();
+            toast('Failed to load sessions', { type: 'error' });
+            console.error('Failed to refresh sessions:', e);
         }
     }
 
@@ -1131,15 +1457,18 @@
         confirmBtn.addEventListener('click', async () => {
             const key = (input.value || '').trim();
             if (!key) return;
+            showLoading('Verifying admin key...');
             try {
                 const json = await validateAdminKey(key);
                 try { sessionStorage.setItem('mfq_admin_key', key); } catch {}
+                hideLoading();
                 close();
                 const sessions = Array.isArray(json.sessions) ? json.sessions : [];
                 const names = sessions.map(s => s.name).filter(Boolean);
-                toast(names.length ? 'Admin OK • ' + names.length + ' sessions' : 'Admin OK');
+                toast(names.length ? 'Admin OK • ' + names.length + ' sessions' : 'Admin OK', { type: 'success' });
                 loadAdminSessions(key, sessions);
             } catch (e) {
+                hideLoading();
                 close({ restore: false });
                 openAdminDialog({ preset: input.value || '', error: 'Invalid admin key. Try again.' });
             }
@@ -1163,12 +1492,15 @@
             openAdminDialog();
             return;
         }
+        showLoading('Verifying admin access...');
         validateAdminKey(existing).then((json) => {
             // valid, load sessions into picker
+            hideLoading();
             const sessions = Array.isArray(json.sessions) ? json.sessions : [];
-            toast(sessions.length ? `Admin OK • ${sessions.length} sessions` : 'Admin OK');
+            toast(sessions.length ? `Admin OK • ${sessions.length} sessions` : 'Admin OK', { type: 'success' });
             loadAdminSessions(existing, sessions);
         }).catch(() => {
+            hideLoading();
             openAdminDialog({ preset: existing, error: 'Saved key is no longer valid.' });
         });
     }

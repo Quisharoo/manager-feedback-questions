@@ -17,6 +17,7 @@ Thumbs.db
 .cursor/
 .aider*
 AGENTS.md
+.ai-artifacts/
 
 # Env files (keep example)
 .env
