@@ -66,28 +66,44 @@
                 createBtn.addEventListener('click', async () => {
                         const name = (input.value || '').trim();
                         if (!name) return;
-                        // If URL has ?cap=1, create a server capability session instead of local-only
-                        let handled = false;
+                        // Always create a server session with capability key
                         try {
-                                const u = new URL(window.location.href);
-                                if (u.searchParams.get('cap') === '1') {
-                                        const res = await fetch('/api/capsessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
-                                        if (res.ok) {
-                                                const json = await res.json();
-                                                if (json && json.links && json.links.edit) {
-                                                        window.location.href = json.links.edit; // redirect to shareable link with id+key
-                                                        handled = true;
+                                const res = await fetch('/api/capsessions', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ name })
+                                });
+                                if (res.ok) {
+                                        const json = await res.json();
+                                        const links = json && json.links;
+                                        if (links && typeof links.edit === 'string' && links.edit) {
+                                                if (typeof window.openShareLinksDialog === 'function') {
+                                                        try { window.openShareLinksDialog(links); } catch (err) { console.error('share dialog failed', err); }
                                                 }
+                                                window.location.href = links.edit;
+                                                return;
                                         }
+                                        if (json && typeof json.url === 'string' && json.url) {
+                                                window.location.href = json.url;
+                                                return;
+                                        }
+                                        // Unexpected success payload; treat as failure to avoid silent misbehaviour
+                                        alert('Failed to create session on server: unexpected response. Creating local session instead.');
+                                } else {
+                                        // Show error message to user
+                                        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
+                                        alert(`Failed to create session on server: ${errorData.error || 'Unknown error'}. Creating local session instead.`);
                                 }
-                        } catch {}
-                        if (!handled) {
-                                state.onCreate && state.onCreate(name);
-                                input.value = '';
-                                createBtn.disabled = true;
-                                form.classList.add('hidden');
-                                toggleBtn.classList.remove('hidden');
+                        } catch (e) {
+                                console.error('Failed to create session:', e);
+                                alert(`Failed to create session on server: ${e.message}. Creating local session instead.`);
                         }
+                        // Fallback to local session if server creation fails
+                        state.onCreate && state.onCreate(name);
+                        input.value = '';
+                        createBtn.disabled = true;
+                        form.classList.add('hidden');
+                        toggleBtn.classList.remove('hidden');
                 });
 
                 area.appendChild(toggleBtn);
@@ -138,12 +154,27 @@
                         none.value = '';
                         none.textContent = '— Select session —';
                         select.appendChild(none);
-                        state.sessions.forEach(name => {
-                                const opt = document.createElement('option');
-                                opt.value = name;
-                                opt.textContent = name;
-                                select.appendChild(opt);
-                        });
+
+                        // Check if we're in admin mode and have server sessions
+                        const isAdmin = state._adminSessions && Array.isArray(state._adminSessions);
+                        if (isAdmin) {
+                                // Show server sessions
+                                state._adminSessions.forEach(session => {
+                                        const opt = document.createElement('option');
+                                        opt.value = session.id;
+                                        opt.textContent = session.name;
+                                        opt.dataset.sessionId = session.id;
+                                        select.appendChild(opt);
+                                });
+                        } else {
+                                // Show local sessions
+                                state.sessions.forEach(name => {
+                                        const opt = document.createElement('option');
+                                        opt.value = name;
+                                        opt.textContent = name;
+                                        select.appendChild(opt);
+                                });
+                        }
                         const openBtn = document.createElement('button');
                         openBtn.id = 'openSessionBtn';
                         openBtn.type = 'button';
@@ -242,9 +273,37 @@
                                 overlay.addEventListener('keydown', onKeydown);
 
                                 cancelButton.addEventListener('click', () => closeDialog());
-                                confirmButton.addEventListener('click', () => {
+                                confirmButton.addEventListener('click', async () => {
                                         closeDialog({ restore: false });
-                                        if (window.SessionStore && typeof window.SessionStore.remove === 'function') {
+                                        const state = ensure(container);
+                                        const isAdmin = state._adminSessions && state._adminKey;
+
+                                        if (isAdmin) {
+                                                // Delete server session
+                                                const sessionId = name; // In admin mode, value is the session ID
+                                                try {
+                                                        const res = await fetch(`/api/admin/sessions/${sessionId}`, {
+                                                                method: 'DELETE',
+                                                                headers: { Authorization: 'Key ' + state._adminKey }
+                                                        });
+                                                        if (res.ok) {
+                                                                // Refresh admin sessions
+                                                                const listRes = await fetch('/api/admin/sessions', {
+                                                                        headers: { Authorization: 'Key ' + state._adminKey }
+                                                                });
+                                                                if (listRes.ok) {
+                                                                        const data = await listRes.json();
+                                                                        SessionPicker.setAdminSessions(container, data.sessions || [], state._adminKey);
+                                                                }
+                                                                select.value = '';
+                                                                openBtn.disabled = true;
+                                                                deleteBtn.disabled = true;
+                                                        }
+                                                } catch (e) {
+                                                        console.error('Failed to delete session:', e);
+                                                }
+                                        } else if (window.SessionStore && typeof window.SessionStore.remove === 'function') {
+                                                // Delete local session
                                                 window.SessionStore.remove(name);
                                                 select.value = '';
                                                 openBtn.disabled = true;
@@ -295,37 +354,32 @@
                         async function submitCreate() {
                                 const name = (input.value || '').trim();
                                 if (!name) return;
-                                let handled = false;
+                                // Always create a server session with capability key
                                 try {
-                                        const u = new URL(window.location.href);
-                                        const admin = u.searchParams.get('admin') === '1';
-                                        const cap = u.searchParams.get('cap') === '1';
-                                        if (admin) {
-                                                const key = sessionStorage.getItem('mfq_admin_key') || '';
-                                                const res = await fetch('/api/admin/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Key ' + key }, body: JSON.stringify({ name }) });
-                                                if (res.ok) {
-                                                        const json = await res.json();
-                                                        if (json && json.links && json.links.edit) {
-                                                                window.location.href = json.links.edit;
-                                                                handled = true;
-                                                        }
+                                        const res = await fetch('/api/capsessions', {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ name })
+                                        });
+                                        if (res.ok) {
+                                                const json = await res.json();
+                                                if (json && json.url) {
+                                                        window.location.href = json.url;
+                                                        return;
                                                 }
-                                        } else if (cap) {
-                                                const res = await fetch('/api/capsessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
-                                                if (res.ok) {
-                                                        const json = await res.json();
-                                                        if (json && json.links && json.links.edit) {
-                                                                window.location.href = json.links.edit;
-                                                                handled = true;
-                                                        }
-                                                }
+                                        } else {
+                                                // Show error message to user
+                                                const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
+                                                alert(`Failed to create session on server: ${errorData.error || 'Unknown error'}. Creating local session instead.`);
                                         }
-                                } catch {}
-                                if (!handled) {
-                                        state.onCreate && state.onCreate(name);
-                                        input.value = '';
-                                        createBtn.disabled = true;
+                                } catch (e) {
+                                        console.error('Failed to create session:', e);
+                                        alert(`Failed to create session on server: ${e.message}. Creating local session instead.`);
                                 }
+                                // Fallback to local session if server creation fails
+                                state.onCreate && state.onCreate(name);
+                                input.value = '';
+                                createBtn.disabled = true;
                         }
                         createBtn.addEventListener('click', submitCreate);
                         input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !createBtn.disabled) { e.preventDefault(); submitCreate(); } });
@@ -368,7 +422,9 @@
                         container.appendChild(card);
 
                         // Default to New tab if no sessions exist; otherwise Existing
-                        if (state.sessions.length === 0) {
+                        const hasAdminSessions = state._adminSessions && state._adminSessions.length > 0;
+                        const hasSessions = state.sessions.length > 0 || hasAdminSessions;
+                        if (!hasSessions) {
                                 // hide Existing tab and panel fully
                                 tabExisting.classList.add('hidden');
                                 panelExisting.classList.add('hidden');
@@ -420,12 +476,52 @@
                                 if (helper) helper.textContent = 'Pick an existing session or create a new one.';
                                 if (tabExisting) tabExisting.classList.remove('hidden');
                         }
+                },
+                setAdminSessions(container, sessions, adminKey) {
+                        const state = ensure(container);
+                        state._adminSessions = sessions;
+                        state._adminKey = adminKey;
+                        // Re-render the select dropdown
+                        const select = container.querySelector('#sessionSelect');
+                        if (select) {
+                                select.innerHTML = '';
+                                const none = document.createElement('option');
+                                none.value = '';
+                                none.textContent = '— Select session —';
+                                select.appendChild(none);
+                                sessions.forEach(session => {
+                                        const opt = document.createElement('option');
+                                        opt.value = session.id;
+                                        opt.textContent = session.name;
+                                        opt.dataset.sessionId = session.id;
+                                        select.appendChild(opt);
+                                });
+                        }
+                        // Show the Existing tab and activate it
+                        const tabExisting = container.querySelector('#tab-existing');
+                        const tabNew = container.querySelector('#tab-new');
+                        const panelExisting = container.querySelector('[role="tabpanel"][aria-labelledby="tab-existing"]');
+                        const panelNew = container.querySelector('[role="tabpanel"][aria-labelledby="tab-new"]');
+                        const helper = state.helperEl || container.querySelector('#sessionPickerHelper');
+                        if (sessions.length > 0) {
+                                if (tabExisting) {
+                                        tabExisting.classList.remove('hidden');
+                                        tabExisting.setAttribute('aria-selected', 'true');
+                                        tabExisting.classList.remove('text-gray-600');
+                                        tabExisting.classList.add('bg-indigo-50', 'text-indigo-700');
+                                }
+                                if (tabNew) {
+                                        tabNew.setAttribute('aria-selected', 'false');
+                                        tabNew.classList.remove('bg-indigo-50', 'text-indigo-700');
+                                        tabNew.classList.add('text-gray-600');
+                                }
+                                if (panelExisting) panelExisting.classList.remove('hidden');
+                                if (panelNew) panelNew.classList.add('hidden');
+                                if (helper) helper.textContent = 'Pick an existing session or create a new one.';
+                        }
                 }
         };
 
         if (typeof module !== 'undefined') module.exports = SessionPicker;
         if (typeof window !== 'undefined') window.SessionPicker = SessionPicker;
 })();
-
-
-

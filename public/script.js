@@ -79,6 +79,43 @@
         const isServerMode = !!(serverSessionId && serverSessionKey);
         if (isServerMode && params.key) persistKey(serverSessionId, serverSessionKey);
 
+        function persistCurrentQuestion(id) {
+            if (activeSession) {
+                activeSession.currentId = id ? String(id) : null;
+            }
+            if (!isServerMode) return;
+            const storageKey = `mfq_current_${serverSessionId}`;
+            try {
+                if (id) {
+                    sessionStorage.setItem(storageKey, String(id));
+                    localStorage.setItem(storageKey, String(id));
+                } else {
+                    sessionStorage.removeItem(storageKey);
+                    localStorage.removeItem(storageKey);
+                }
+            } catch {}
+        }
+
+        function readPersistedCurrent() {
+            if (!isServerMode) return null;
+            const storageKey = `mfq_current_${serverSessionId}`;
+            try {
+                const stored = sessionStorage.getItem(storageKey) || localStorage.getItem(storageKey);
+                return stored && stored.trim() ? stored : null;
+            } catch {
+                return null;
+            }
+        }
+
+        function questionPayloadById(id) {
+            if (!id) return null;
+            const q = idMap.byId.get(id);
+            if (!q) return null;
+            const payload = { id: String(id), text: q.text };
+            if (q.theme) payload.theme = q.theme;
+            return payload;
+        }
+
         function ensureResultsButton() {
             if (!isServerMode) return;
             if (resultsBtn) return;
@@ -144,34 +181,47 @@
                     const entry = Array.from(idMap.byId.values()).find(q => q && q.text === text);
                     if (entry && typeof value === 'string' && value.trim() !== '') idToAnswer[String(entry.id)] = value;
                 }
-                activeSession = { name: data.name || 'session', askedIds, timestamps, answers: idToAnswer };
-                window.__activeSessionName = activeSession.name;
-
                 let currentId = null;
-                if (data.currentQuestion && data.currentQuestion.text) {
+                if (data.currentQuestionId && idMap.byId.has(String(data.currentQuestionId))) {
+                    currentId = String(data.currentQuestionId);
+                } else if (data.currentQuestion && data.currentQuestion.text) {
                     const currentQuestion = Array.from(idMap.byId.values()).find(q => q && q.text === data.currentQuestion.text);
                     if (currentQuestion) {
                         currentId = currentQuestion.id;
                     }
                 }
+                if (!currentId) {
+                    const storedId = readPersistedCurrent();
+                    if (storedId && idMap.byId.has(storedId)) {
+                        currentId = storedId;
+                    }
+                }
+
+                activeSession = { name: data.name || 'session', askedIds, timestamps, answers: idToAnswer, currentId: currentId || null };
+                window.__activeSessionName = activeSession.name;
 
                 if (currentId) {
                     isPreview = false;
+                    persistCurrentQuestion(currentId);
                     renderQuestionById(currentId, { persist: false });
                 } else {
                     const askedSet = new Set(activeSession.askedIds);
                     const nextId = window.SelectionUtils.nextQuestionId(idMap.order, askedSet);
                     if (nextId) {
                         isPreview = false;
-                        renderQuestionById(nextId, { persist: false });
                         try {
-                            const q = idMap.byId.get(nextId);
-                            if (isServerMode && q) {
-                                await apiPatchCap(serverSessionId, serverSessionKey, { action: 'setCurrentQuestion', question: { text: q && q.text } });
+                            const payload = questionPayloadById(nextId);
+                            if (isServerMode && payload) {
+                                await apiPatchCap(serverSessionId, serverSessionKey, { action: 'setCurrentQuestion', question: payload });
                             }
-                        } catch {}
+                        } catch (e) {
+                            console.error('Failed to sync current question to server:', e);
+                        }
+                        persistCurrentQuestion(nextId);
+                        renderQuestionById(nextId, { persist: false });
                     } else {
                         renderQuestionById(null, { persist: false });
+                        persistCurrentQuestion(null);
                     }
                 }
                 updateSessionInfo();
@@ -241,15 +291,19 @@
                     const val = textarea.value || '';
                     if (isServerMode) {
                         try {
-                            const q = idMap.byId.get(id);
-                            await apiPatchCap(serverSessionId, serverSessionKey, { action: 'setAnswer', question: { text: q && q.text }, value: val });
+                            const payload = questionPayloadById(id);
+                            const body = { action: 'setAnswer', question: payload || { text: id && question ? question.text : '' }, value: val };
+                            await apiPatchCap(serverSessionId, serverSessionKey, body);
                             if (!activeSession.answers || typeof activeSession.answers !== 'object') activeSession.answers = {};
                             activeSession.answers[String(id)] = val;
                             if (askedContainer && window.AskedList) {
                                 const answeredIds = Object.entries(activeSession.answers || {}).filter(([,v]) => typeof v === 'string' && v.trim() !== '').map(([k]) => String(k));
                                 window.AskedList.update(askedContainer, { askedIds: activeSession.askedIds, timestamps: activeSession.timestamps, answeredIds });
                             }
-                        } catch {}
+                        } catch (e) {
+                            console.error('Failed to save answer to server:', e);
+                            toast('Failed to save answer');
+                        }
                     } else if (window.SessionStore && typeof window.SessionStore.setAnswer === 'function') {
                         window.SessionStore.setAnswer(activeSession.name, id, val);
                         activeSession = window.SessionStore.open(activeSession.name);
@@ -259,7 +313,9 @@
                         }
                     }
                 });
-            } catch {}
+            } catch (e) {
+                console.error('Failed to setup answer handler:', e);
+            }
         }
 
         function updateSessionInfo() {
@@ -276,7 +332,7 @@
             resetBtn.disabled = false;
         }
 
-        function onOpenSession(name) {
+        async function onOpenSession(name) {
             if (!name) return;
             if (isServerMode) {
                 activeSession = activeSession && activeSession.name ? activeSession : { name, askedIds: [], timestamps: [] };
@@ -286,25 +342,30 @@
             }
             window.__activeSessionName = activeSession.name;
             if (activeSession.currentId) {
-                renderQuestionById(activeSession.currentId, { persist: false });
                 isPreview = false;
+                persistCurrentQuestion(activeSession.currentId);
+                renderQuestionById(activeSession.currentId, { persist: false });
             } else {
                 const askedSet = new Set(activeSession.askedIds);
                 const nextId = window.SelectionUtils.nextQuestionId(idMap.order, askedSet);
                 if (nextId) {
                     isPreview = false;
-                    renderQuestionById(nextId, { persist: !isServerMode });
                     if (historyChip) historyChip.classList.add('hidden');
 
                     if (isServerMode) {
-                        const q = idMap.byId.get(nextId);
+                        const payload = questionPayloadById(nextId);
                         try {
-                            apiPatchCap(serverSessionId, serverSessionKey, { action: 'setCurrentQuestion', question: { text: q && q.text } });
-                        } catch {}
+                            if (payload) await apiPatchCap(serverSessionId, serverSessionKey, { action: 'setCurrentQuestion', question: payload });
+                        } catch (e) {
+                            console.error('Failed to sync current question to server:', e);
+                        }
                     }
+                    persistCurrentQuestion(nextId);
+                    renderQuestionById(nextId, { persist: !isServerMode });
                 } else {
                     renderQuestionById(null, { persist: false });
                     isPreview = false;
+                    persistCurrentQuestion(null);
                 }
             }
             updateSessionInfo();
@@ -349,25 +410,37 @@
                 if (textarea && currentQuestionId && activeSession) {
                     const val = textarea.value || '';
                     if (isServerMode) {
-                        const q = idMap.byId.get(currentQuestionId);
-                        await apiPatchCap(serverSessionId, serverSessionKey, { action: 'setAnswer', question: { text: q && q.text }, value: val });
+                        const qObj = idMap.byId.get(currentQuestionId);
+                        const payload = questionPayloadById(currentQuestionId);
+                        const baseQuestion = payload || (qObj ? { text: qObj.text, theme: qObj.theme } : { text: '' });
+                        await apiPatchCap(serverSessionId, serverSessionKey, { action: 'setAnswer', question: baseQuestion, value: val });
                         if (!activeSession.answers || typeof activeSession.answers !== 'object') activeSession.answers = {};
                         activeSession.answers[String(currentQuestionId)] = val;
                     } else if (window.SessionStore && typeof window.SessionStore.setAnswer === 'function') {
                         window.SessionStore.setAnswer(activeSession.name, currentQuestionId, val);
                     }
                 }
-            } catch {}
+            } catch (e) {
+                console.error('Failed to save answer before advancing:', e);
+                toast('Failed to save answer');
+                isAdvancing = false;
+                return;
+            }
             // Record the currently shown question as asked, whether preview or not.
             if (currentQuestionId) {
                 if (isServerMode) {
-                    const q = idMap.byId.get(currentQuestionId);
+                    const qObj = idMap.byId.get(currentQuestionId);
+                    const payload = questionPayloadById(currentQuestionId);
+                    const baseQuestion = payload || (qObj ? { text: qObj.text, theme: qObj.theme } : { text: '' });
                     try {
-                        await apiPatchCap(serverSessionId, serverSessionKey, { action: 'markAsked', question: { text: q && q.text } });
+                        await apiPatchCap(serverSessionId, serverSessionKey, { action: 'markAsked', question: baseQuestion });
                         const now = Date.now();
                         activeSession.askedIds = (activeSession.askedIds || []).concat([currentQuestionId]);
                         activeSession.timestamps = (activeSession.timestamps || []).concat([now]);
-                    } catch {}
+                    } catch (e) {
+                        console.error('Failed to mark question as asked on server:', e);
+                        toast('Failed to sync question status');
+                    }
                 } else {
                     window.SessionStore.addAsked(activeSession.name, currentQuestionId);
                     activeSession = window.SessionStore.open(activeSession.name);
@@ -381,18 +454,19 @@
                 isAdvancing = false;
                 return;
             }
+            if (isServerMode && nextId) {
+                const payload = questionPayloadById(nextId);
+                try {
+                    if (payload) await apiPatchCap(serverSessionId, serverSessionKey, { action: 'setCurrentQuestion', question: payload });
+                } catch (e) {
+                    console.error('Failed to sync next question to server:', e);
+                }
+            }
+            persistCurrentQuestion(nextId);
             renderQuestionById(nextId, { persist: !isServerMode });
             isPreview = false;
             if (historyChip) historyChip.classList.add('hidden');
-            
-            // Persist the current question in server mode
-            if (isServerMode && nextId) {
-                const q = idMap.byId.get(nextId);
-                try {
-                    await apiPatchCap(serverSessionId, serverSessionKey, { action: 'setCurrentQuestion', question: { text: q && q.text } });
-                } catch {}
-            }
-            
+
             updateSessionInfo();
             if (askedContainer && window.AskedList) {
                 const answeredIds = activeSession.answers ? Object.entries(activeSession.answers || {}).filter(([,v]) => typeof v === 'string' && v.trim() !== '').map(([k]) => String(k)) : [];
@@ -413,13 +487,18 @@
                     await apiPatchCap(serverSessionId, serverSessionKey, { action: 'undoAsked' });
                     last = activeSession.askedIds.pop();
                     if (Array.isArray(activeSession.timestamps)) activeSession.timestamps.pop();
-                } catch {}
+                } catch (e) {
+                    console.error('Failed to undo question on server:', e);
+                    toast('Failed to undo');
+                    return;
+                }
             } else {
                 last = window.SessionStore.removeLastAsked(activeSession.name);
                 activeSession = window.SessionStore.open(activeSession.name);
             }
             if (last) {
                 renderQuestionById(last, { persist: true });
+                persistCurrentQuestion(last);
             }
             isPreview = false;
             if (historyChip) historyChip.classList.add('hidden');
@@ -437,11 +516,14 @@
                 apiPatchCap(serverSessionId, serverSessionKey, { action: 'reset' }).catch(() => {});
                 activeSession.askedIds = [];
                 activeSession.timestamps = [];
+                activeSession.answers = {};
+                activeSession.currentId = null;
             } else {
                 window.SessionStore.reset(activeSession.name);
                 activeSession = window.SessionStore.open(activeSession.name);
             }
             renderQuestionById(null);
+            persistCurrentQuestion(null);
             updateSessionInfo();
             if (askedContainer && window.AskedList) window.AskedList.update(askedContainer, { askedIds: activeSession.askedIds, timestamps: activeSession.timestamps });
             if (exhaustedBanner) exhaustedBanner.classList.add('invisible');
@@ -640,10 +722,7 @@
                 if (resetBtn) resetBtn.classList.remove('hidden');
                 ensureResultsButton();
                 if (resultsBtn) resultsBtn.classList.remove('hidden');
-                try {
-                    const key = sessionStorage.getItem('mfq_admin_key') || '';
-                    if (key) ensureAdminControls(key);
-                } catch {}
+                // Admin controls removed - now integrated with session picker
                 if (questionCard) questionCard.classList.remove('hidden');
             } catch {}
             const overlay = document.getElementById('sessionGateOverlay');
@@ -673,6 +752,7 @@
                     if (btn) btn.addEventListener('click', () => {
                         const cur = activeSession && activeSession.currentId ? activeSession.currentId : null;
                         renderQuestionById(cur, { persist: false });
+                        persistCurrentQuestion(cur);
                         isPreview = false;
                         historyChip.classList.add('hidden');
                     });
@@ -723,6 +803,136 @@
         const res = await fetch('/api/admin/sessions', { headers: { Authorization: 'Key ' + key } });
         if (!res.ok) throw new Error('Invalid');
         return res.json().catch(() => ({}));
+    }
+
+    async function deleteAdminSession(id, adminKey) {
+        const res = await fetch(`/api/admin/sessions/${id}`, {
+            method: 'DELETE',
+            headers: { Authorization: 'Key ' + adminKey }
+        });
+        if (!res.ok) throw new Error('Failed to delete');
+        return res.json();
+    }
+
+    function formatTimestamp(timestamp) {
+        if (!timestamp) return 'N/A';
+        const date = new Date(timestamp);
+        const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+
+        if (diffMins < 1) return 'just now';
+        if (diffMins < 60) return `${diffMins}m ago`;
+        if (diffHours < 24) return `${diffHours}h ago`;
+        if (diffDays < 7) return `${diffDays}d ago`;
+        return date.toLocaleDateString();
+    }
+
+    function showAdminSessionsPanel(sessions, adminKey) {
+        // Remove existing panel if any
+        const existing = document.getElementById('adminSessionsPanel');
+        if (existing) existing.remove();
+
+        const panel = document.createElement('div');
+        panel.id = 'adminSessionsPanel';
+        panel.className = 'fixed bottom-20 right-6 bg-white rounded-lg shadow-xl border border-gray-200 w-96 max-h-96 overflow-hidden flex flex-col';
+        panel.style.zIndex = '50';
+
+        const header = document.createElement('div');
+        header.className = 'p-3 border-b border-gray-200 flex items-center justify-between bg-gray-50';
+        header.innerHTML = `
+            <div class="flex items-center gap-2">
+                <span class="text-sm font-semibold text-gray-700">Server Sessions</span>
+                <span class="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">${sessions.length}</span>
+            </div>
+            <button id="adminPanelClose" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times"></i>
+            </button>
+        `;
+
+        const listContainer = document.createElement('div');
+        listContainer.className = 'overflow-y-auto flex-1';
+
+        if (sessions.length === 0) {
+            listContainer.innerHTML = `
+                <div class="p-4 text-center text-gray-500 text-sm">
+                    <div class="mb-2"><i class="fas fa-info-circle"></i></div>
+                    <div>No sessions yet. Create one to get started!</div>
+                </div>
+            `;
+        } else {
+            const sortedSessions = [...sessions].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+            sortedSessions.forEach(session => {
+                const item = document.createElement('div');
+                item.className = 'p-3 border-b border-gray-100 hover:bg-gray-50 transition-colors';
+                item.innerHTML = `
+                    <div class="flex items-start justify-between gap-2">
+                        <div class="flex-1 min-w-0">
+                            <div class="text-sm font-medium text-gray-900 truncate">${escapeHtml(session.name)}</div>
+                            <div class="text-xs text-gray-500 mt-1">
+                                <div>Created: ${formatTimestamp(session.createdAt)}</div>
+                                <div>Last access: ${formatTimestamp(session.lastAccess)}</div>
+                            </div>
+                        </div>
+                        <button class="admin-delete-session text-xs text-red-600 hover:text-red-800 px-2 py-1 rounded hover:bg-red-50" data-session-id="${escapeHtml(session.id)}" title="Delete session">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                    <div class="mt-2 text-xs text-gray-400 font-mono truncate" title="${escapeHtml(session.id)}">ID: ${escapeHtml(session.id)}</div>
+                `;
+                listContainer.appendChild(item);
+            });
+        }
+
+        const footer = document.createElement('div');
+        footer.className = 'p-2 border-t border-gray-200 bg-yellow-50';
+        footer.innerHTML = `
+            <div class="text-xs text-yellow-800 flex items-start gap-2">
+                <i class="fas fa-exclamation-triangle mt-0.5"></i>
+                <div>Session links are only shown once at creation. Save them when creating sessions!</div>
+            </div>
+        `;
+
+        panel.appendChild(header);
+        panel.appendChild(listContainer);
+        panel.appendChild(footer);
+        document.body.appendChild(panel);
+
+        // Event handlers
+        const closeBtn = header.querySelector('#adminPanelClose');
+        closeBtn.addEventListener('click', () => panel.remove());
+
+        // Delete session handlers
+        const deleteButtons = listContainer.querySelectorAll('.admin-delete-session');
+        deleteButtons.forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const sessionId = btn.dataset.sessionId;
+                const sessionItem = btn.closest('.p-3');
+                const sessionName = sessionItem.querySelector('.text-sm').textContent;
+
+                if (!confirm(`Delete session "${sessionName}"?\n\nThis cannot be undone.`)) return;
+
+                try {
+                    await deleteAdminSession(sessionId, adminKey);
+                    toast('Session deleted');
+                    // Refresh the panel
+                    const json = await validateAdminKey(adminKey);
+                    showAdminSessionsPanel(json.sessions || [], adminKey);
+                } catch (err) {
+                    toast('Failed to delete session');
+                    console.error('Delete failed:', err);
+                }
+            });
+        });
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 
     function openShareLinksDialog(links) {
@@ -834,6 +1044,14 @@
                 const json = await res.json();
                 close();
                 if (json && json.links) openShareLinksDialog(json.links);
+                // Refresh the sessions list
+                try {
+                    const updatedJson = await validateAdminKey(adminKey);
+                    const sessions = Array.isArray(updatedJson.sessions) ? updatedJson.sessions : [];
+                    loadAdminSessions(adminKey, sessions);
+                } catch (e) {
+                    console.error('Failed to refresh sessions:', e);
+                }
             } catch {
                 toast('Failed to create');
             }
@@ -841,23 +1059,12 @@
         setTimeout(() => { try { input.focus(); } catch {} }, 0);
     }
 
-    function ensureAdminControls(adminKey) {
-        if (!adminKey) return;
-        let floatBtn = document.getElementById('adminCreateBtn');
-        if (!floatBtn) {
-            floatBtn = document.createElement('button');
-            floatBtn.id = 'adminCreateBtn';
-            floatBtn.className = 'fixed bottom-6 right-6 btn-primary text-white px-4 py-2 rounded-full shadow-lg';
-            floatBtn.textContent = 'Create server session';
-            floatBtn.style.zIndex = '60';
-            floatBtn.addEventListener('click', () => {
-                if (!floatBtn._adminKey) return;
-                openCreateServerSessionDialog(floatBtn._adminKey);
-            });
-            document.body.appendChild(floatBtn);
+    function loadAdminSessions(adminKey, sessions) {
+        // Load sessions into the session picker's "Existing" tab
+        const sessionSection = document.getElementById('session-section');
+        if (sessionSection && window.SessionPicker) {
+            window.SessionPicker.setAdminSessions(sessionSection, sessions, adminKey);
         }
-        floatBtn._adminKey = adminKey;
-        floatBtn.classList.remove('hidden');
     }
 
     function openAdminDialog(opts) {
@@ -928,9 +1135,10 @@
                 const json = await validateAdminKey(key);
                 try { sessionStorage.setItem('mfq_admin_key', key); } catch {}
                 close();
-                const names = Array.isArray(json.sessions) ? json.sessions.map(s => s.name).filter(Boolean) : [];
+                const sessions = Array.isArray(json.sessions) ? json.sessions : [];
+                const names = sessions.map(s => s.name).filter(Boolean);
                 toast(names.length ? 'Admin OK • ' + names.length + ' sessions' : 'Admin OK');
-                ensureAdminControls(key);
+                loadAdminSessions(key, sessions);
             } catch (e) {
                 close({ restore: false });
                 openAdminDialog({ preset: input.value || '', error: 'Invalid admin key. Try again.' });
@@ -955,9 +1163,11 @@
             openAdminDialog();
             return;
         }
-        validateAdminKey(existing).then(() => {
-            // valid, show quick controls
-            ensureAdminControls(existing);
+        validateAdminKey(existing).then((json) => {
+            // valid, load sessions into picker
+            const sessions = Array.isArray(json.sessions) ? json.sessions : [];
+            toast(sessions.length ? `Admin OK • ${sessions.length} sessions` : 'Admin OK');
+            loadAdminSessions(existing, sessions);
         }).catch(() => {
             openAdminDialog({ preset: existing, error: 'Saved key is no longer valid.' });
         });
