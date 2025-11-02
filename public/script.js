@@ -691,8 +691,16 @@
         function renderSessionPickerInto(container) {
             if (container && window.SessionPicker) {
                 sessionPickerHost = container;
+                
+                // Check if we're in admin mode
+                const isAdminMode = window.location.href.includes('admin=1');
+                
+                // In admin mode, don't pass sessions yet - they'll be loaded after authentication
+                // In regular mode, use localStorage sessions
+                const sessions = isAdminMode ? [] : window.SessionStore.getAll();
+                
                 window.SessionPicker.render(container, {
-                    sessions: window.SessionStore.getAll(),
+                    sessions: sessions,
                     onOpen: onOpenSession,
                     onCreate: onCreateSession,
                 });
@@ -1457,10 +1465,27 @@
     }
 
     function loadAdminSessions(adminKey, sessions) {
+        // First, show the session gate UI
+        showSessionGate();
+
+        console.log('[loadAdminSessions] Received sessions:', sessions.length, sessions);
+
         // Load sessions into the session picker's "Existing" tab
-        const sessionSection = document.getElementById('session-section');
-        if (sessionSection && window.SessionPicker) {
-            window.SessionPicker.setAdminSessions(sessionSection, sessions, adminKey);
+        const pickerHost = (typeof sessionPickerHost !== 'undefined' && sessionPickerHost)
+            ? sessionPickerHost
+            : document.getElementById('session-section');
+        if (pickerHost && window.SessionPicker) {
+            window.SessionPicker.setAdminSessions(pickerHost, sessions, adminKey);
+        }
+
+        // If the picker host isn't ready yet (e.g., overlay still mounting), retry once the stack clears
+        if (!pickerHost && typeof window !== 'undefined') {
+            setTimeout(() => {
+                const retryHost = sessionPickerHost || document.getElementById('session-section');
+                if (retryHost && window.SessionPicker) {
+                    window.SessionPicker.setAdminSessions(retryHost, sessions, adminKey);
+                }
+            }, 0);
         }
 
         // BUG FIX #2: Show the admin sessions button in the header

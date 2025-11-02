@@ -123,19 +123,56 @@
     "10562f31-a11c-4d99-a121-c3380ab6e63b": {
       "id": "10562f31-a11c-4d99-a121-c3380ab6e63b",
       "name": "asdasdasdas",
-      "asked": [],
+      "asked": [
+        {
+          "text": "Are there any skills you've been wanting to build but haven't had time?",
+          "theme": "Coaching + Development"
+        },
+        {
+          "text": "Is there anything I could take off your plate this week?",
+          "theme": "Support + Load-Balancing"
+        },
+        {
+          "text": "Am I giving you enough information to do your job well?",
+          "theme": "Vision + Priorities"
+        },
+        {
+          "text": "What's something you wish we did more efficiently as a team?",
+          "theme": "Efficiency + Frustrations"
+        },
+        {
+          "text": "What's a decision you're stuck on that we could talk through?",
+          "theme": "Coaching + Development"
+        },
+        {
+          "text": "Would you like more or less direction from me right now?",
+          "theme": "Vision + Priorities"
+        },
+        {
+          "text": "Would it help to reprioritize anything?",
+          "theme": "Support + Load-Balancing"
+        }
+      ],
       "skipped": [],
       "editKeyHash": "JzNHiqERFnC4DLw4M5vTm+nZHQUBe7jvYiKMi2jC9GQ=",
       "viewKeyHash": "VmtQkVgdrDZZbj9Do35enmou80clvo+aImiAOnhJuR0=",
       "createdAt": 1762110926981,
-      "lastAccess": 1762111458042,
+      "lastAccess": 1762112477398,
       "cap": true,
-      "answers": {},
-      "currentQuestion": {
-        "text": "Are there any skills you've been wanting to build but haven't had time?",
-        "theme": "Coaching + Development"
+      "answers": {
+        "Are there any skills you've been wanting to build but haven't had time?": "asdasdasd",
+        "Is there anything I could take off your plate this week?": "asdasdasdasdsad",
+        "Am I giving you enough information to do your job well?": "dfsafasdfsdafsdf",
+        "What's something you wish we did more efficiently as a team?": "",
+        "What's a decision you're stuck on that we could talk through?": "",
+        "Would you like more or less direction from me right now?": "",
+        "Would it help to reprioritize anything?": ""
       },
-      "currentQuestionId": "12:1272262165"
+      "currentQuestion": {
+        "text": "What are your biggest time-wasters right now?",
+        "theme": "Efficiency + Frustrations"
+      },
+      "currentQuestionId": "22:797382452"
     },
     "bd03069f-91b2-496e-8076-9805bf5ea2b0": {
       "id": "bd03069f-91b2-496e-8076-9805bf5ea2b0",
@@ -235,6 +272,196 @@
         "theme": "Vision + Priorities"
       },
       "currentQuestionId": "1:1161780152"
+    },
+    "9a3e257c-5e3c-480c-b270-184341aaf9eb": {
+      "id": "9a3e257c-5e3c-480c-b270-184341aaf9eb",
+      "name": "asdasdasdsadasdasdasdasd",
+      "asked": [],
+      "skipped": [],
+      "editKeyHash": "ClnMDMiSESnxROis/Zd3bcVvIJ71Ba9lo04N85IVqhM=",
+      "viewKeyHash": "WLArwv/j6cNg8iSu4NArE1GzO1N1ru4KZjwB+HJnoCA=",
+      "createdAt": 1762111762945,
+      "lastAccess": 1762111763541,
+      "cap": true,
+      "answers": {},
+      "currentQuestion": {
+        "text": "What's one thing that's been frustrating you the past few weeks?",
+        "theme": "Efficiency + Frustrations"
+      },
+      "currentQuestionId": "21:828366198"
+    },
+    "9d57330d-554a-4ea4-8206-778325995c0e": {
+      "id": "9d57330d-554a-4ea4-8206-778325995c0e",
+      "name": "asdads",
+      "asked": [],
+      "skipped": [],
+      "editKeyHash": "6az+zOMOYD0IBLeUZ1WBHhWVkldXEYMk8Aj70VwHLYE=",
+      "viewKeyHash": "sT6CwyvQqGTphkodVU4RSvbF8m6WikQNbueg3iQVxOA=",
+      "createdAt": 1762111920394,
+      "lastAccess": 1762111920394,
+      "cap": true,
+      "answers": {}
+    },
+    "ad2dc799-45dd-4cec-8961-4ccf8f39edf5": {
+      "id": "ad2dc799-45dd-4cec-8961-4ccf8f39edf5",
+      "name": "asdasd",
+      "asked": [],
+      "skipped": [],
+      "editKeyHash": "IikZFxGkCi7nYScvqNo/DjzcWnKX69drqDK3rN6sB1U=",
+      "viewKeyHash": "Hp5N4O2DsrjVPomTe5mmgiZrGXxU2vZUSo5aAUdLXFA=",
+      "createdAt": 1762111991350,
+      "lastAccess": 1762111991350,
+      "cap": true,
+      "answers": {}
+    },
+    "ab36cc0d-0d45-4528-8ab2-ff675fb0eba7": {
+      "id": "ab36cc0d-0d45-4528-8ab2-ff675fb0eba7",
+      "name": "adsdasd",
+      "asked": [],
+      "skipped": [],
+      "editKeyHash": "k2DWhoPDLL7E+MqGvNgGDEjFSmVsLpYRsdIDVxkumYc=",
+      "viewKeyHash": "NRUDDHOGN7/PQq5oGrx3Ugqd6+jUilT1aA4xaw5fPxo=",
+      "createdAt": 1762111995821,
+      "lastAccess": 1762111995821,
+      "cap": true,
+      "answers": {}
+    },
+    "0f652944-4a29-4ef5-a567-7bd241c16b28": {
+      "id": "0f652944-4a29-4ef5-a567-7bd241c16b28",
+      "name": "a",
+      "asked": [],
+      "skipped": [],
+      "editKeyHash": "Ps/L/kDhTfey5VeJPB9ECOI6aXinDD+w8pIfIs3L7Tg=",
+      "viewKeyHash": "9T/Y139pE//nPn5ATWkQvW+PQ0qKb6vLhvM2u1I3oGw=",
+      "createdAt": 1762112005499,
+      "lastAccess": 1762112005499,
+      "cap": true,
+      "answers": {}
+    },
+    "65658686-d62e-4b30-b684-b6333c10dc31": {
+      "id": "65658686-d62e-4b30-b684-b6333c10dc31",
+      "name": "dfffff",
+      "asked": [],
+      "skipped": [],
+      "editKeyHash": "bBH//TN92gcdf9iflLTkK7c9ZuIMRZ3Di657Tilqx40=",
+      "viewKeyHash": "zUyhAe3h+vAxHbRTwcMx0azPlCTYSLpxt/3k28ngg34=",
+      "createdAt": 1762112376664,
+      "lastAccess": 1762112376664,
+      "cap": true,
+      "answers": {}
+    },
+    "41b9192e-3fe7-4920-8cce-43ff6893da84": {
+      "id": "41b9192e-3fe7-4920-8cce-43ff6893da84",
+      "name": "asdasdasdd",
+      "asked": [],
+      "skipped": [],
+      "editKeyHash": "Sr8wmsreKDELMDuvpyzUGNGKMOz2T1ISJ1F2EvAuDO0=",
+      "viewKeyHash": "ToH2R1mxs16y3NQD4AJNqqBnB1saWub1M+gxtKND86Q=",
+      "createdAt": 1762112440338,
+      "lastAccess": 1762112440338,
+      "cap": true,
+      "answers": {}
+    },
+    "b69a2c5b-407b-4fe0-990b-b99a82b37af7": {
+      "id": "b69a2c5b-407b-4fe0-990b-b99a82b37af7",
+      "name": "asdasdasd",
+      "asked": [],
+      "skipped": [],
+      "editKeyHash": "wxed4ZcYULGFXHlmo37vhtr3EOdpgP+lFNlfV86IWtg=",
+      "viewKeyHash": "r04JF/HzP2G+M799VLwNmVlVKHpUWb9oh/JiaYGbRa8=",
+      "createdAt": 1762117808846,
+      "lastAccess": 1762117809427,
+      "cap": true,
+      "answers": {},
+      "currentQuestion": {
+        "text": "What part of my communication style makes your job harder than it should?",
+        "theme": "Work Style"
+      },
+      "currentQuestionId": "4:724004658"
+    },
+    "9b0f7819-e3cc-48b2-9d87-702955569c8a": {
+      "id": "9b0f7819-e3cc-48b2-9d87-702955569c8a",
+      "name": "fffff",
+      "asked": [],
+      "skipped": [],
+      "editKeyHash": "LB5vDTc2O8LgZnnMZ8oiZybzg7dhwDvreh5u47rTpP4=",
+      "viewKeyHash": "J529Yi1sv78M2fPEuLqtzidwu1hwBWb8K9uwATvFudM=",
+      "createdAt": 1762117826514,
+      "lastAccess": 1762117826514,
+      "cap": true,
+      "answers": {}
+    },
+    "21e9628c-5b8f-4a80-adc7-5b57085cb9f5": {
+      "id": "21e9628c-5b8f-4a80-adc7-5b57085cb9f5",
+      "name": "choco",
+      "asked": [],
+      "skipped": [],
+      "editKeyHash": "7JbBodEpN9VHL1Xl8sEbKYRt8OLHHDZ8V05Plr4bUpc=",
+      "viewKeyHash": "T3M87OqKJoUrpsC1QCwPXNdHkv0Jp6KV091omzuOzcg=",
+      "createdAt": 1762117837164,
+      "lastAccess": 1762117837164,
+      "cap": true,
+      "answers": {}
+    },
+    "e1a6fd69-a762-4ad9-a617-7dca9c514131": {
+      "id": "e1a6fd69-a762-4ad9-a617-7dca9c514131",
+      "name": "ddddd",
+      "asked": [],
+      "skipped": [],
+      "editKeyHash": "SHvJg0hTPq/bbgVpHPaN7sZxk6AN/SRvcOKuNM0zw0w=",
+      "viewKeyHash": "UMg25a4C2LJRAE4uYocWeos6zJTjgYkVysSWyPRnpSc=",
+      "createdAt": 1762118057332,
+      "lastAccess": 1762118057332,
+      "cap": true,
+      "answers": {}
+    },
+    "e19cfe9b-63ba-4527-a0c9-f1c4ff75cf5b": {
+      "id": "e19cfe9b-63ba-4527-a0c9-f1c4ff75cf5b",
+      "name": "asdadsda",
+      "asked": [],
+      "skipped": [],
+      "editKeyHash": "kMZizwEvOopBtKC4Kq8zsukmFUtdnW6P901KO4oUcLY=",
+      "viewKeyHash": "mrub9BD4rG1p1K4NHQCMR7ZXhvg1rgkzYYRIaGrams4=",
+      "createdAt": 1762118060813,
+      "lastAccess": 1762118060813,
+      "cap": true,
+      "answers": {}
+    },
+    "57b5f42a-82c4-460c-90c4-57e4721277e6": {
+      "id": "57b5f42a-82c4-460c-90c4-57e4721277e6",
+      "name": "asdasdas",
+      "asked": [],
+      "skipped": [],
+      "editKeyHash": "9irHpw7MZgC3+iBVWIVRVas4aqegXND/hbKYIRqDXBg=",
+      "viewKeyHash": "bJ+dd49HDJc+lILjhQ6SGRB+X8tO3qwugrR5tWtxTe4=",
+      "createdAt": 1762118062631,
+      "lastAccess": 1762118062631,
+      "cap": true,
+      "answers": {}
+    },
+    "03ddbded-efe3-471e-b1fa-c25006e3dc84": {
+      "id": "03ddbded-efe3-471e-b1fa-c25006e3dc84",
+      "name": "NENWNWNW",
+      "asked": [],
+      "skipped": [],
+      "editKeyHash": "CKwq0naR9pd9bxbpvmA2te+MzmZMxOoOdnRqmyzA9fQ=",
+      "viewKeyHash": "/WBWOOanSt1cavSaZAtBuubBa9DDFu3LrCOUSFu8V9E=",
+      "createdAt": 1762118070847,
+      "lastAccess": 1762118070847,
+      "cap": true,
+      "answers": {}
+    },
+    "4e47b0f8-e59d-4036-8ac4-2bd4e9bfd2a4": {
+      "id": "4e47b0f8-e59d-4036-8ac4-2bd4e9bfd2a4",
+      "name": "LAST",
+      "asked": [],
+      "skipped": [],
+      "editKeyHash": "9KiQ4XYdpD1L6GQX0ISgJIYxzNcO66qplD6+4Ro4jQ8=",
+      "viewKeyHash": "6VddfF5eAIZ2HZBeEpk+Er2vDL8BOSfac2yoH8w2R1w=",
+      "createdAt": 1762118078065,
+      "lastAccess": 1762118078065,
+      "cap": true,
+      "answers": {}
     }
   }
 }

@@ -480,54 +480,57 @@
 
                                 // Always create a server session with capability key
                                 if (window.showLoading) window.showLoading('Creating session...');
-                                try {
-                                        const res = await fetch('/api/capsessions', {
-                                                method: 'POST',
-                                                headers: { 'Content-Type': 'application/json' },
-                                                body: JSON.stringify({ name })
-                                        });
-                                        if (res.ok) {
-                                                const json = await res.json();
-                                                if (json && json.url) {
-                                                        if (window.hideLoading) window.hideLoading();
-                                                        // BUG FIX #3: In admin mode, don't redirect - just show success and refresh session list
-                                                        if (isAdminMode) {
-                                                                input.value = '';
-                                                                createBtn.disabled = true;
-                                                                // Refresh the admin sessions list
-                                                                try {
-                                                                        const adminKey = sessionStorage.getItem('mfq_admin_key');
-                                                                        if (adminKey) {
-                                                                                const res = await fetch('/api/admin/sessions', { headers: { Authorization: 'Key ' + adminKey } });
-                                                                                if (res.ok) {
-                                                                                        const data = await res.json();
-                                                                                        const sessions = Array.isArray(data.sessions) ? data.sessions : [];
-                                                                                        SessionPicker.setAdminSessions(container, sessions, adminKey);
-                                                                                        // Auto-switch to the "Existing" tab to show the new session
-                                                                                        const tabExisting = container.querySelector('#tab-existing');
-                                                                                        if (tabExisting && typeof tabExisting.click === 'function') {
-                                                                                                setTimeout(() => { try { tabExisting.click(); } catch {} }, 100);
-                                                                                        }
-                                                                                }
-                                                                        }
-                                                                } catch (e) {
-                                                                        console.error('Failed to refresh sessions:', e);
-                                                                }
-                                                                // Show success message after the share dialog closes
-                                                                setTimeout(() => {
-                                                                        if (window.toast) window.toast('Session created! It now appears in the Existing tab. Remember to save the capability link!', { type: 'success', duration: 4000 });
-                                                                }, 500);
-                                                                return;
-                                                        }
-                                                        window.location.href = json.url;
-                                                        return;
-                                                }
-                                        } else {
-                                                // Show error message to user
-                                                const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
-                                                if (window.toast) window.toast(`Failed to create session on server: ${errorData.error || 'Unknown error'}. Creating local session instead.`, { type: 'error', duration: 4000 });
-                                        }
-                                } catch (e) {
+				try {
+					const res = await fetch('/api/capsessions', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ name })
+					});
+					if (res.ok) {
+						const json = await res.json();
+						const links = json && json.links;
+						const editUrl = links && typeof links.edit === 'string' ? links.edit : (json && typeof json.url === 'string' ? json.url : '');
+						if (links && typeof window.openShareLinksDialog === 'function') {
+							try { window.openShareLinksDialog(links); } catch (err) { console.error('share dialog failed', err); }
+						}
+						if (editUrl) {
+							if (window.hideLoading) window.hideLoading();
+							if (isAdminMode) {
+								input.value = '';
+								createBtn.disabled = true;
+								try {
+									const adminKey = sessionStorage.getItem('mfq_admin_key');
+									if (adminKey) {
+										const adminRes = await fetch('/api/admin/sessions', { headers: { Authorization: 'Key ' + adminKey } });
+										if (adminRes.ok) {
+											const data = await adminRes.json();
+											const sessions = Array.isArray(data.sessions) ? data.sessions : [];
+											SessionPicker.setAdminSessions(container, sessions, adminKey);
+											const tabExisting = container.querySelector('#tab-existing');
+											if (tabExisting && typeof tabExisting.click === 'function') {
+												setTimeout(() => { try { tabExisting.click(); } catch {} }, 100);
+											}
+										}
+									}
+								} catch (e) {
+									console.error('Failed to refresh sessions:', e);
+								}
+								setTimeout(() => {
+									if (window.toast) {
+										window.toast('Session created! It now appears in the Existing tab. Remember to save the capability link!', { type: 'success', duration: 4000 });
+									}
+								}, 500);
+								return;
+							}
+							window.location.href = editUrl;
+							return;
+						}
+					} else {
+						// Show error message to user
+						const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
+						if (window.toast) window.toast(`Failed to create session on server: ${errorData.error || 'Unknown error'}. Creating local session instead.`, { type: 'error', duration: 4000 });
+					}
+				} catch (e) {
                                         console.error('Failed to create session:', e);
                                         if (window.toast) window.toast(`Failed to create session on server: ${e.message}. Creating local session instead.`, { type: 'error', duration: 4000 });
                                 } finally {
@@ -595,9 +598,13 @@
                                 helper.textContent = 'Pick an existing session or create a new one.';
                         }
                 },
-                updateSessions(container, sessions) {
-                        const state = ensure(container);
-                        state.sessions = filterSessions(sessions);
+		updateSessions(container, sessions) {
+			const state = ensure(container);
+			// When admin sessions are present, avoid clobbering the server-backed list with local storage data.
+			if (state._adminKey || Array.isArray(state._adminSessions)) {
+				return;
+			}
+			state.sessions = filterSessions(sessions);
                         const select = container.querySelector('#sessionSelect');
                         if (select) {
                                 const current = select.value;

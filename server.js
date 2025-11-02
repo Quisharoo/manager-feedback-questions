@@ -1,3 +1,6 @@
+// Load environment variables from .env file
+require('dotenv').config();
+
 const express = require('express');
 const path = require('path');
 const { createSession, getSession, saveSession, updateSession, listSessions, deleteSession } = require('./server/sessionStore');
