@@ -1,56 +1,99 @@
 {
   "sessions": {
-    "35b5cda0-3b73-4561-aeb6-e727219ad436": {
-      "id": "35b5cda0-3b73-4561-aeb6-e727219ad436",
-      "name": "asdasdas",
+    "17177aae-014b-4db0-9ecf-f732fc0fd75c": {
+      "id": "17177aae-014b-4db0-9ecf-f732fc0fd75c",
+      "name": "Sec",
+      "asked": [],
+      "skipped": [],
+      "editKeyHash": "6SUbIx5pkEuvE9APVRLYdg+WJ6a7nL9GVAxZhjI6GYM=",
+      "viewKeyHash": "Z6Y2ZsHk2SqW4WejGRZ3JxEA7COWMXuLymOoZkr8Sv0=",
+      "createdAt": 1762033625657,
+      "lastAccess": 1762033625657,
+      "answers": {}
+    },
+    "0ae017ee-1050-43e7-9103-5eb757f64019": {
+      "id": "0ae017ee-1050-43e7-9103-5eb757f64019",
+      "name": "A",
       "asked": [
+        {
+          "text": "Q1"
+        }
+      ],
+      "skipped": [],
+      "editKeyHash": "sTyFIakwuG534i0h8m+wf6zFvjvgD8duEq90PDA0JZw=",
+      "viewKeyHash": "IJIg4BFgECJFtZ8I2sZzWE4Xmn0FAhQB0RyFkKCzwvA=",
+      "createdAt": 1762033625670,
+      "lastAccess": 1762033625674,
+      "answers": {}
+    },
+    "56fed7e7-d495-4632-95bf-da988bcbeacd": {
+      "id": "56fed7e7-d495-4632-95bf-da988bcbeacd",
+      "name": "Cap A",
+      "asked": [],
+      "skipped": [],
+      "editKeyHash": "PiGpM1GLpRBE5SFQytLHDURN6ZY81hNSQXXHGPs7G6M=",
+      "viewKeyHash": "z6Ec7WKQjeyp7Nckt6jHfuY6O9PjExzt9D8qqXSJywc=",
+      "createdAt": 1762033625801,
+      "lastAccess": 1762033625809,
+      "cap": true,
+      "currentQuestion": null,
+      "currentQuestionId": null,
+      "answers": {}
+    },
+    "a9b54630-3233-4421-808c-f58ae33b5dd1": {
+      "id": "a9b54630-3233-4421-808c-f58ae33b5dd1",
+      "name": "Legacy",
+      "asked": [],
+      "skipped": []
+    },
+    "48555e16-a230-4663-a91f-793c06d87ad1": {
+      "id": "48555e16-a230-4663-a91f-793c06d87ad1",
+      "name": "asd",
+      "asked": [
+        {
+          "id": "3:1447200386",
+          "text": "Are there any priorities I can clarify for you?",
+          "theme": "Vision + Priorities"
+        },
+        {
+          "id": "7:84502725",
+          "text": "Do you feel like you're spread too thin right now?",
+          "theme": "Support + Load-Balancing"
+        },
+        {
+          "id": "10:1551223905",
+          "text": "Would it help to reprioritize anything?",
+          "theme": "Support + Load-Balancing"
+        },
         {
           "id": "23:188661793",
           "text": "What's something you wish we did more efficiently as a team?",
           "theme": "Efficiency + Frustrations"
-        }
-      ],
-      "skipped": [],
-      "editKeyHash": "DcNPALVQxOhgOBVabhEX5jdXMnn3oPEAUi4xicy9aWs=",
-      "viewKeyHash": "DcNPALVQxOhgOBVabhEX5jdXMnn3oPEAUi4xicy9aWs=",
-      "createdAt": 1762032497451,
-      "lastAccess": 1762032866124,
-      "cap": true,
-      "answers": {
-        "What's something you wish we did more efficiently as a team?": "asdadasdsad"
-      }
-    },
-    "ba4cc746-1cab-4f58-9530-00654ad4576f": {
-      "id": "ba4cc746-1cab-4f58-9530-00654ad4576f",
-      "name": "adsdasdsad",
-      "asked": [
+        },
         {
-          "id": "9:1234830072",
-          "text": "Have I been mindful enough of timelines and bandwidth?",
+          "id": "8:335713304",
+          "text": "Is there anything I could take off your plate this week?",
           "theme": "Support + Load-Balancing"
         },
         {
-          "id": "1:1161780152",
-          "text": "Would you like more or less direction from me right now?",
-          "theme": "Vision + Priorities"
-        },
-        {
-          "id": "11:1056841936",
-          "text": "What aspect of your role would you like more coaching on?",
-          "theme": "Coaching + Development"
+          "id": "19:1566947128",
+          "text": "Is there a conversation we haven't had yet that we probably should?",
+          "theme": "Team + Dynamics"
         }
       ],
       "skipped": [],
-      "editKeyHash": "ObG4i1lbK07rma/ipMmwzfSd2YNdPNBpIXNP27EsRiA=",
-      "viewKeyHash": "ObG4i1lbK07rma/ipMmwzfSd2YNdPNBpIXNP27EsRiA=",
-      "createdAt": 1762032872457,
-      "lastAccess": 1762032904153,
+      "editKeyHash": "gaimt81T2S95HiKNgYSx1oNDUo2hzeu4oXFt2tBtKjA=",
+      "viewKeyHash": "gaimt81T2S95HiKNgYSx1oNDUo2hzeu4oXFt2tBtKjA=",
+      "createdAt": 1762068688586,
+      "lastAccess": 1762068695435,
       "cap": true,
       "answers": {
-        "Have I been mindful enough of timelines and bandwidth?": "",
-        "Would you like more or less direction from me right now?": "",
+        "Are there any priorities I can clarify for you?": "",
         "Do you feel like you're spread too thin right now?": "",
-        "What aspect of your role would you like more coaching on?": ""
+        "Would it help to reprioritize anything?": "",
+        "What's something you wish we did more efficiently as a team?": "",
+        "Is there anything I could take off your plate this week?": "",
+        "Is there a conversation we haven't had yet that we probably should?": ""
       }
     }
   }

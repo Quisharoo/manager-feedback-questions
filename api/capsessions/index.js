@@ -4,8 +4,8 @@ const { genKey, hashKey, isAdmin, KEY_SIZE_EDIT, KEY_SIZE_VIEW, ADMIN_KEY } = re
 const { createRateLimiter } = require('../../api/_rateLimit');
 const { validateSessionName } = require('../../api/_validation');
 
-// Rate limit: 10 sessions per hour per IP
-const checkRateLimit = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10 });
+// Rate limit: 5 sessions per hour per IP
+const checkRateLimit = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 5 });
 
 module.exports = async (req, res) => {
   logRequest(req);
@@ -20,7 +20,14 @@ module.exports = async (req, res) => {
     return; // Error response already sent
   }
 
-  // Check rate limit
+  // Check admin authentication if ADMIN_KEY is configured
+  if (ADMIN_KEY && !isAdmin(req)) {
+    res.statusCode = 403;
+    res.setHeader('Content-Type', 'application/json');
+    return res.end(JSON.stringify({ error: 'Forbidden: Admin authentication required' }));
+  }
+
+  // Check rate limit (only for non-admin users to prevent abuse)
   const rateLimitResult = checkRateLimit(req);
   if (!rateLimitResult.allowed) {
     res.statusCode = 429;
@@ -31,8 +38,6 @@ module.exports = async (req, res) => {
       retryAfter: rateLimitResult.retryAfter
     }));
   }
-
-  // No authentication required - anyone can create a session (but rate limited)
   const body = await parseBody(req);
 
   // Validate session name

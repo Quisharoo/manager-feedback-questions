@@ -214,7 +214,9 @@
                             if (isServerMode && payload) {
                                 await apiPatchCap(serverSessionId, serverSessionKey, { action: 'setCurrentQuestion', question: payload });
                             }
-                        } catch {}
+                        } catch (e) {
+                            console.error('Failed to sync current question to server:', e);
+                        }
                         persistCurrentQuestion(nextId);
                         renderQuestionById(nextId, { persist: false });
                     } else {
@@ -298,7 +300,10 @@
                                 const answeredIds = Object.entries(activeSession.answers || {}).filter(([,v]) => typeof v === 'string' && v.trim() !== '').map(([k]) => String(k));
                                 window.AskedList.update(askedContainer, { askedIds: activeSession.askedIds, timestamps: activeSession.timestamps, answeredIds });
                             }
-                        } catch {}
+                        } catch (e) {
+                            console.error('Failed to save answer to server:', e);
+                            toast('Failed to save answer');
+                        }
                     } else if (window.SessionStore && typeof window.SessionStore.setAnswer === 'function') {
                         window.SessionStore.setAnswer(activeSession.name, id, val);
                         activeSession = window.SessionStore.open(activeSession.name);
@@ -308,7 +313,9 @@
                         }
                     }
                 });
-            } catch {}
+            } catch (e) {
+                console.error('Failed to setup answer handler:', e);
+            }
         }
 
         function updateSessionInfo() {
@@ -349,7 +356,9 @@
                         const payload = questionPayloadById(nextId);
                         try {
                             if (payload) await apiPatchCap(serverSessionId, serverSessionKey, { action: 'setCurrentQuestion', question: payload });
-                        } catch {}
+                        } catch (e) {
+                            console.error('Failed to sync current question to server:', e);
+                        }
                     }
                     persistCurrentQuestion(nextId);
                     renderQuestionById(nextId, { persist: !isServerMode });
@@ -411,7 +420,12 @@
                         window.SessionStore.setAnswer(activeSession.name, currentQuestionId, val);
                     }
                 }
-            } catch {}
+            } catch (e) {
+                console.error('Failed to save answer before advancing:', e);
+                toast('Failed to save answer');
+                isAdvancing = false;
+                return;
+            }
             // Record the currently shown question as asked, whether preview or not.
             if (currentQuestionId) {
                 if (isServerMode) {
@@ -423,7 +437,10 @@
                         const now = Date.now();
                         activeSession.askedIds = (activeSession.askedIds || []).concat([currentQuestionId]);
                         activeSession.timestamps = (activeSession.timestamps || []).concat([now]);
-                    } catch {}
+                    } catch (e) {
+                        console.error('Failed to mark question as asked on server:', e);
+                        toast('Failed to sync question status');
+                    }
                 } else {
                     window.SessionStore.addAsked(activeSession.name, currentQuestionId);
                     activeSession = window.SessionStore.open(activeSession.name);
@@ -441,7 +458,9 @@
                 const payload = questionPayloadById(nextId);
                 try {
                     if (payload) await apiPatchCap(serverSessionId, serverSessionKey, { action: 'setCurrentQuestion', question: payload });
-                } catch {}
+                } catch (e) {
+                    console.error('Failed to sync next question to server:', e);
+                }
             }
             persistCurrentQuestion(nextId);
             renderQuestionById(nextId, { persist: !isServerMode });
@@ -468,7 +487,11 @@
                     await apiPatchCap(serverSessionId, serverSessionKey, { action: 'undoAsked' });
                     last = activeSession.askedIds.pop();
                     if (Array.isArray(activeSession.timestamps)) activeSession.timestamps.pop();
-                } catch {}
+                } catch (e) {
+                    console.error('Failed to undo question on server:', e);
+                    toast('Failed to undo');
+                    return;
+                }
             } else {
                 last = window.SessionStore.removeLastAsked(activeSession.name);
                 activeSession = window.SessionStore.open(activeSession.name);
@@ -853,11 +876,11 @@
                                 <div>Last access: ${formatTimestamp(session.lastAccess)}</div>
                             </div>
                         </div>
-                        <button class="admin-delete-session text-xs text-red-600 hover:text-red-800 px-2 py-1 rounded hover:bg-red-50" data-session-id="${session.id}" title="Delete session">
+                        <button class="admin-delete-session text-xs text-red-600 hover:text-red-800 px-2 py-1 rounded hover:bg-red-50" data-session-id="${escapeHtml(session.id)}" title="Delete session">
                             <i class="fas fa-trash"></i>
                         </button>
                     </div>
-                    <div class="mt-2 text-xs text-gray-400 font-mono truncate" title="${session.id}">ID: ${session.id}</div>
+                    <div class="mt-2 text-xs text-gray-400 font-mono truncate" title="${escapeHtml(session.id)}">ID: ${escapeHtml(session.id)}</div>
                 `;
                 listContainer.appendChild(item);
             });

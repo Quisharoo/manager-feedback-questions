@@ -5,15 +5,22 @@
 
 const rateLimitStore = new Map();
 
-// Clean up old entries every 5 minutes
-setInterval(() => {
+/**
+ * Lazy cleanup of expired rate limit entries
+ * Runs on each request to prevent memory leaks in serverless environments
+ * Only cleans up if store is getting large to minimize overhead
+ */
+function cleanupExpiredEntries() {
   const now = Date.now();
-  for (const [key, data] of rateLimitStore.entries()) {
-    if (now - data.resetTime > 0) {
-      rateLimitStore.delete(key);
+  // Only clean if we have more than 100 entries to minimize overhead
+  if (rateLimitStore.size > 100) {
+    for (const [key, data] of rateLimitStore.entries()) {
+      if (now > data.resetTime) {
+        rateLimitStore.delete(key);
+      }
     }
   }
-}, 5 * 60 * 1000);
+}
 
 /**
  * Rate limiter middleware
@@ -24,6 +31,9 @@ setInterval(() => {
  */
 function createRateLimiter({ windowMs = 60000, max = 10 } = {}) {
   return (req) => {
+    // Lazy cleanup to prevent memory leaks in serverless
+    cleanupExpiredEntries();
+
     const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
                req.connection?.remoteAddress ||
                req.socket?.remoteAddress ||

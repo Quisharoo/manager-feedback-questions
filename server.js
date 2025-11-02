@@ -193,6 +193,12 @@ app.patch('/api/sessions/:id', async (req, res) => {
   if (!updated) {
     return res.status(404).json({ error: 'Not found' });
   }
+
+  // Check if validation failed
+  if (updated.error && !updated.id) {
+    return res.status(400).json({ error: updated.error });
+  }
+
   res.json(updated);
 });
 
@@ -283,6 +289,12 @@ app.patch('/api/capsessions/:id', async (req, res) => {
     return null;
   });
   if (!updated) return res.status(404).json({ error: 'Not found' });
+
+  // Check if validation failed
+  if (updated.error && !updated.id) {
+    return res.status(400).json({ error: updated.error });
+  }
+
   res.json(updated);
 });
 

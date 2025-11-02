@@ -134,12 +134,64 @@ async function saveSession(session) {
   return fileStore.saveSession(session);
 }
 
+// In-memory locks for KV updates to prevent race conditions
+const kvUpdateLocks = new Map();
+
 async function updateSession(id, updater) {
   if (useKV) {
-    const current = await kvGet(`session:${id}`);
-    const updated = updater(current);
-    if (updated) await kvSet(`session:${id}`, updated);
-    return updated;
+    // Use promise chaining to serialize updates per session (same as fileStore)
+    const last = kvUpdateLocks.get(id) || Promise.resolve();
+    const next = last.then(async () => {
+      const MAX_RETRIES = 3;
+      let retries = 0;
+
+      while (retries < MAX_RETRIES) {
+        const current = await kvGet(`session:${id}`);
+        if (!current) return null;
+
+        // Add version to session if not present
+        if (typeof current._version !== 'number') {
+          current._version = 0;
+        }
+
+        const currentVersion = current._version;
+        const updated = updater(current);
+
+        // Check if updater returned an error
+        if (!updated || (updated.error && !updated.id)) {
+          return updated;
+        }
+
+        // Increment version for optimistic locking
+        updated._version = currentVersion + 1;
+
+        try {
+          // Try to save with version check
+          // Note: Basic implementation - ideally use Redis WATCH/MULTI/EXEC for true atomicity
+          const checkCurrent = await kvGet(`session:${id}`);
+          if (checkCurrent && checkCurrent._version !== currentVersion) {
+            // Version mismatch - someone else updated, retry
+            retries++;
+            continue;
+          }
+
+          await kvSet(`session:${id}`, updated);
+          return updated;
+        } catch (e) {
+          retries++;
+          if (retries >= MAX_RETRIES) throw e;
+        }
+      }
+
+      throw new Error('Max retries exceeded for session update');
+    }).catch((e) => { throw e; });
+
+    // Cleanup when the chain settles
+    kvUpdateLocks.set(id, next.finally(() => {
+      if (kvUpdateLocks.get(id) === next) kvUpdateLocks.delete(id);
+    }));
+
+    return next;
   }
   return fileStore.updateSession(id, updater);
 }
