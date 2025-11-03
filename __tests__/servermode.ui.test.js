@@ -8,7 +8,7 @@ describe('Server-mode UI: answers load and persist with unique link', () => {
   beforeEach(() => {
     // Reset DOM and URL to include capability session params
     document.body.innerHTML = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
-    window.history.pushState({}, '', '/?id=test-session-1&key=test-key-1');
+    window.history.pushState({}, '', '/?id=test-session-1&key=test-key-1&cap=1');
     jest.resetModules();
 
     // Deterministic next question selection: pick first remaining
@@ -68,6 +68,9 @@ describe('Server-mode UI: answers load and persist with unique link', () => {
     expect(textarea).toBeTruthy();
     // Initial value should come from server-provided answers
     expect(textarea.value).toBe('Server notes');
+    const resultsBtn = document.getElementById('resultsBtn');
+    expect(resultsBtn).toBeTruthy();
+    expect(new URL(resultsBtn.href).searchParams.get('cap')).toBe('1');
 
     // Edit and blur -> should PATCH to server
     textarea.value = 'Edited on client';
@@ -132,4 +135,3 @@ describe('Server-mode UI: answers load and persist with unique link', () => {
     expect(resetCall).toBeTruthy();
   });
 });
-

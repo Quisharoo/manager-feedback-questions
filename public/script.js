@@ -125,7 +125,7 @@
             resultsBtn.id = 'resultsBtn';
             resultsBtn.className = 'btn-primary text-white font-bold py-4 px-8 rounded-full text-lg shadow-lg';
             resultsBtn.textContent = 'Results';
-            resultsBtn.href = `/results.html?id=${encodeURIComponent(serverSessionId)}&key=${encodeURIComponent(serverSessionKey)}`;
+            resultsBtn.href = `/results.html?id=${encodeURIComponent(serverSessionId)}&key=${encodeURIComponent(serverSessionKey)}&cap=1`;
             parent.appendChild(resultsBtn);
         }
 
