@@ -61,59 +61,6 @@
         let isAdvancing = false;
         let resetUndoTimer = null;
 
-        // Global toast notification system
-        function toast(msg, options = {}) {
-            const duration = options.duration || 2500;
-            const type = options.type || 'default'; // 'default', 'success', 'error'
-            const t = document.createElement('div');
-
-            let bgClass = 'bg-gray-900';
-            let icon = '';
-            if (type === 'success') {
-                bgClass = 'bg-green-600';
-                icon = '<i class="fas fa-check-circle mr-2"></i>';
-            } else if (type === 'error') {
-                bgClass = 'bg-red-600';
-                icon = '<i class="fas fa-exclamation-circle mr-2"></i>';
-            }
-
-            t.className = `fixed bottom-6 left-1/2 -translate-x-1/2 ${bgClass} text-white text-sm px-4 py-2 rounded-lg shadow-lg flex items-center z-50 animate-slide-up`;
-            t.innerHTML = `${icon}<span>${msg}</span>`;
-            t.setAttribute('role', 'status');
-            t.setAttribute('aria-live', 'polite');
-            document.body.appendChild(t);
-            setTimeout(() => {
-                t.style.opacity = '0';
-                t.style.transform = 'translateX(-50%) translateY(10px)';
-                t.style.transition = 'all 0.3s ease';
-                setTimeout(() => t.remove(), 300);
-            }, duration);
-        }
-        window.toast = toast; // Make available globally
-
-        // Loading state management
-        let loadingOverlay = null;
-        function showLoading(message = 'Loading...') {
-            if (loadingOverlay) return; // Prevent multiple overlays
-            loadingOverlay = document.createElement('div');
-            loadingOverlay.className = 'loading-overlay';
-            loadingOverlay.innerHTML = `
-                <div class="bg-white rounded-lg p-6 shadow-xl flex flex-col items-center">
-                    <div class="loading-spinner-large mb-3"></div>
-                    <div class="text-gray-700 text-sm">${message}</div>
-                </div>
-            `;
-            document.body.appendChild(loadingOverlay);
-        }
-        function hideLoading() {
-            if (loadingOverlay) {
-                loadingOverlay.remove();
-                loadingOverlay = null;
-            }
-        }
-        window.showLoading = showLoading;
-        window.hideLoading = hideLoading;
-
         function getUrlParams() {
             try {
                 const u = new URL(window.location.href);
@@ -683,99 +630,6 @@
             }
         }
 
-        // Check if user has seen welcome screen
-        function hasSeenWelcome() {
-            // Skip welcome screen in test environment
-            if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'test') {
-                return true;
-            }
-            // Skip welcome screen in admin mode
-            try {
-                const u = new URL(window.location.href);
-                if (u.searchParams.get('admin') === '1') {
-                    return true;
-                }
-            } catch {}
-            try {
-                return localStorage.getItem('mfq_seen_welcome') === 'true';
-            } catch {
-                return false;
-            }
-        }
-        function markWelcomeSeen() {
-            try {
-                localStorage.setItem('mfq_seen_welcome', 'true');
-            } catch {}
-        }
-
-        function showWelcomeScreen(onContinue) {
-            const overlay = document.createElement('div');
-            overlay.id = 'welcomeOverlay';
-            overlay.className = 'fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50';
-            const dialog = document.createElement('div');
-            dialog.className = 'bg-white rounded-xl p-6 w-full max-w-lg shadow-2xl';
-            dialog.setAttribute('role', 'dialog');
-            dialog.setAttribute('aria-modal', 'true');
-            dialog.setAttribute('aria-labelledby', 'welcomeTitle');
-            dialog.tabIndex = -1;
-            dialog.innerHTML = `
-                <div class="text-center mb-6">
-                    <div class="text-indigo-600 text-5xl mb-4">
-                        <i class="fas fa-comments"></i>
-                    </div>
-                    <h2 id="welcomeTitle" class="text-2xl font-bold text-gray-900 mb-2">Welcome to Manager Feedback Questions</h2>
-                    <p class="text-gray-600">Your companion for better 1-on-1 conversations</p>
-                </div>
-                <div class="space-y-4 mb-6 text-left">
-                    <div class="flex items-start gap-3">
-                        <div class="text-indigo-600 text-xl mt-1"><i class="fas fa-question-circle"></i></div>
-                        <div>
-                            <h3 class="font-semibold text-gray-900">Curated Questions</h3>
-                            <p class="text-sm text-gray-600">Get thoughtful questions across 7 themes to improve team dynamics</p>
-                        </div>
-                    </div>
-                    <div class="flex items-start gap-3">
-                        <div class="text-indigo-600 text-xl mt-1"><i class="fas fa-folder"></i></div>
-                        <div>
-                            <h3 class="font-semibold text-gray-900">Track Sessions</h3>
-                            <p class="text-sm text-gray-600">Create separate sessions for each team member or meeting</p>
-                        </div>
-                    </div>
-                    <div class="flex items-start gap-3">
-                        <div class="text-indigo-600 text-xl mt-1"><i class="fas fa-history"></i></div>
-                        <div>
-                            <h3 class="font-semibold text-gray-900">Never Repeat</h3>
-                            <p class="text-sm text-gray-600">Questions are tracked so you won't see the same one twice</p>
-                        </div>
-                    </div>
-                </div>
-                <button id="welcomeContinueBtn" class="btn-primary w-full text-white font-semibold py-3 px-6 rounded-lg">
-                    Get Started
-                </button>
-            `;
-            overlay.appendChild(dialog);
-            document.body.appendChild(overlay);
-
-            const prevOverflow = document.body.style.overflow;
-            const prevPaddingRight = document.body.style.paddingRight;
-            const scrollBarWidth = window.innerWidth - document.documentElement.clientWidth;
-            if (scrollBarWidth > 0) {
-                document.body.style.paddingRight = String(scrollBarWidth) + 'px';
-            }
-            document.body.style.overflow = 'hidden';
-
-            const continueBtn = dialog.querySelector('#welcomeContinueBtn');
-            continueBtn.addEventListener('click', () => {
-                overlay.remove();
-                document.body.style.overflow = prevOverflow;
-                document.body.style.paddingRight = prevPaddingRight;
-                markWelcomeSeen();
-                if (typeof onContinue === 'function') onContinue();
-            });
-
-            setTimeout(() => { try { continueBtn.focus(); } catch {} }, 100);
-        }
-
         function lockApp() {
             try {
                 if (askedContainer) askedContainer.classList.add('hidden');
@@ -1081,14 +935,6 @@
  
 // --- Admin setup modal + auto-verify ---
 (function () {
-    function toast(msg) {
-        const t = document.createElement('div');
-        t.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-sm px-3 py-1.5 rounded shadow';
-        t.textContent = msg;
-        document.body.appendChild(t);
-        setTimeout(() => { t.remove(); }, 2500);
-    }
-
     async function validateAdminKey(key) {
         const api = (typeof window !== 'undefined' && window.SessionApi) || {};
         if (typeof api.fetchAdminSessions !== 'function') {
@@ -1103,22 +949,6 @@
             throw new Error('Session API unavailable');
         }
         return api.deleteAdminSession(id, adminKey);
-    }
-
-    function formatTimestamp(timestamp) {
-        if (!timestamp) return 'N/A';
-        const date = new Date(timestamp);
-        const now = new Date();
-        const diffMs = now - date;
-        const diffMins = Math.floor(diffMs / 60000);
-        const diffHours = Math.floor(diffMs / 3600000);
-        const diffDays = Math.floor(diffMs / 86400000);
-
-        if (diffMins < 1) return 'just now';
-        if (diffMins < 60) return `${diffMins}m ago`;
-        if (diffHours < 24) return `${diffHours}h ago`;
-        if (diffDays < 7) return `${diffDays}d ago`;
-        return date.toLocaleDateString();
     }
 
     function showAdminSessionsPanel(sessions, adminKey) {
