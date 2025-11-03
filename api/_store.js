@@ -141,11 +141,14 @@ async function getSession(id) {
 
 async function saveSession(session) {
   if (useKV) {
-    // Use updateSession to maintain version consistency and avoid race conditions
-    return updateSession(session.id, (current) => {
-      // Merge the updated fields while preserving version
-      return { ...current, ...session };
-    });
+    // For KV, use direct write with last-write-wins semantics
+    const key = `session:${session.id}`;
+    const current = await kvGet(key);
+    if (!current) return null;
+
+    const merged = { ...current, ...session };
+    await kvSet(key, merged);
+    return merged;
   }
   return fileStore.saveSession(session);
 }
@@ -155,52 +158,38 @@ const kvUpdateLocks = new Map();
 
 async function updateSession(id, updater) {
   if (useKV) {
-    // Use promise chaining to serialize updates per session (same as fileStore)
+    // Use promise chaining to serialize updates per session within this Lambda instance
+    // Note: This doesn't provide cross-Lambda serialization, but helps reduce contention
     const last = kvUpdateLocks.get(id) || Promise.resolve();
     const next = last.then(async () => {
       const MAX_RETRIES = 3;
       let retries = 0;
 
       while (retries < MAX_RETRIES) {
-        const current = await kvGet(`session:${id}`);
-        if (!current) {
-          console.error('[store] updateSession: Session not found in KV:', { id });
-          return null;
-        }
-
-        // Add version to session if not present
-        if (typeof current._version !== 'number') {
-          current._version = 0;
-        }
-
-        const currentVersion = current._version;
-        const updated = updater(current);
-
-        // Check if updater returned an error
-        if (!updated || (updated.error && !updated.id)) {
-          return updated;
-        }
-
-        // Increment version for optimistic locking
-        updated._version = currentVersion + 1;
-
         try {
-          // Try to save with version check
-          // Note: Basic implementation - ideally use Redis WATCH/MULTI/EXEC for true atomicity
-          const checkCurrent = await kvGet(`session:${id}`);
-          if (checkCurrent && checkCurrent._version !== currentVersion) {
-            // Version mismatch - someone else updated, retry
-            console.warn('[store] updateSession: Version conflict, retrying:', { id, retries, currentVersion, checkVersion: checkCurrent._version });
-            retries++;
-            continue;
+          const current = await kvGet(`session:${id}`);
+          if (!current) {
+            console.error('[store] updateSession: Session not found in KV:', { id });
+            return null;
           }
 
+          const updated = updater(current);
+
+          // Check if updater returned an error
+          if (!updated || (updated.error && !updated.id)) {
+            return updated;
+          }
+
+          // Use last-write-wins semantics (no version checking)
+          // In a distributed serverless environment, we can't do atomic CAS without WATCH/MULTI/EXEC
           await kvSet(`session:${id}`, updated);
           return updated;
         } catch (e) {
-          console.error('[store] updateSession: Error during save attempt:', { id, retries, error: e.message });
+          console.error('[store] updateSession: Error during update:', { id, retries, error: e.message });
           retries++;
           if (retries >= MAX_RETRIES) throw e;
+          // Small delay before retry on error
+          await new Promise(resolve => setTimeout(resolve, 50 + Math.random() * 50));
         }
       }
 
