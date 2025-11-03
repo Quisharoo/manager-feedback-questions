@@ -48,6 +48,7 @@ describe('Server-mode UI: answers load and persist with unique link', () => {
     require('../public/askedList');
     require('../public/sessionApi');
     require('../public/ui-utils');
+    require('../public/dialogs');
     require('../public/sessionPicker');
     require('../public/script');
   });
