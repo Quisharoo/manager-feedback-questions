@@ -138,7 +138,7 @@
                 openShareLinksDialog(links);
                 setTimeout(() => {
                     window.location.href = links.edit;
-                }, 500);
+                }, 3000);
             } catch (e) {
                 console.error('Failed to create session:', e);
                 toast(`Failed to create session: ${e && e.message ? e.message : 'Unknown error'}`, { type: 'error', duration: 4000 });
