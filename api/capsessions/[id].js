@@ -12,9 +12,14 @@ module.exports = async (req, res) => {
   }
   const session = await store.getSession(id);
   if (!session) {
+    console.error('[capsessions] Session not found on initial fetch:', { id, method: req.method });
     res.statusCode = 404;
     res.setHeader('Content-Type', 'application/json');
     return res.end(JSON.stringify({ error: 'Not found' }));
+  }
+
+  if (req.method === 'PATCH') {
+    console.log('[capsessions] PATCH request for session:', { id, hasSession: !!session });
   }
   const key = extractKey(req);
   if (!capKeyAllowsRead(session, key)) {
@@ -49,12 +54,20 @@ module.exports = async (req, res) => {
 
     const updated = await store.updateSession(id, (s) => {
       return applySessionAction(s, action, question, value);
-    }).catch(() => null);
+    }).catch((err) => {
+      console.error('[capsessions] updateSession failed:', {
+        id,
+        error: err.message,
+        stack: err.stack
+      });
+      return null;
+    });
 
     if (!updated) {
+      console.error('[capsessions] Session not found during update:', { id });
       res.statusCode = 404;
       res.setHeader('Content-Type', 'application/json');
-      return res.end(JSON.stringify({ error: 'Not found' }));
+      return res.end(JSON.stringify({ error: 'Session not found or update failed' }));
     }
 
     // Check if validation failed

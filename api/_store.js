@@ -48,9 +48,22 @@ if (!useKV) {
   fileStore = require(path.join('..', 'server', 'sessionStore'));
 }
 
+// Log storage backend on module load
+console.log('[store] Storage backend initialized:', {
+  useKV,
+  hasKV: !!kv,
+  hasFileStore: !!fileStore,
+  vercel: !!process.env.VERCEL,
+  kvUrl: process.env.KV_REST_API_URL ? 'set' : 'not set',
+  upstashUrl: process.env.UPSTASH_REDIS_REST_URL ? 'set' : 'not set'
+});
+
 async function kvGet(key) {
   const val = await kv.get(key);
-  if (!val) return null;
+  if (!val) {
+    console.log('[store] kvGet: Key not found in KV:', { key });
+    return null;
+  }
   try { return typeof val === 'string' ? JSON.parse(val) : val; } catch (e) {
     console.error('[store] kvGet: Failed to parse value for key', key, e.message);
     return null;
@@ -114,6 +127,7 @@ async function kvUpsertIndex(prefix, id) {
 
 async function createSession(name, extra) {
   if (useKV) {
+    console.log('[store] createSession using KV:', { name });
     const { randomUUID } = require('crypto');
     const id = randomUUID();
     const session = { id, name, asked: [], skipped: [], answers: {}, ...(extra || {}) };
@@ -121,11 +135,16 @@ async function createSession(name, extra) {
     await kvUpsertIndex('session', id);
     return session;
   }
+  console.log('[store] createSession using fileStore:', { name });
   return fileStore.createSession(name, extra || {});
 }
 
 async function getSession(id) {
-  if (useKV) return kvGet(`session:${id}`);
+  if (useKV) {
+    console.log('[store] getSession using KV:', { id });
+    return kvGet(`session:${id}`);
+  }
+  console.log('[store] getSession using fileStore:', { id });
   return fileStore.getSession(id);
 }
 
@@ -147,7 +166,10 @@ async function updateSession(id, updater) {
 
       while (retries < MAX_RETRIES) {
         const current = await kvGet(`session:${id}`);
-        if (!current) return null;
+        if (!current) {
+          console.error('[store] updateSession: Session not found in KV:', { id });
+          return null;
+        }
 
         // Add version to session if not present
         if (typeof current._version !== 'number') {
@@ -171,6 +193,7 @@ async function updateSession(id, updater) {
           const checkCurrent = await kvGet(`session:${id}`);
           if (checkCurrent && checkCurrent._version !== currentVersion) {
             // Version mismatch - someone else updated, retry
+            console.warn('[store] updateSession: Version conflict, retrying:', { id, retries, currentVersion, checkVersion: checkCurrent._version });
             retries++;
             continue;
           }
@@ -178,12 +201,15 @@ async function updateSession(id, updater) {
           await kvSet(`session:${id}`, updated);
           return updated;
         } catch (e) {
+          console.error('[store] updateSession: Error during save attempt:', { id, retries, error: e.message });
           retries++;
           if (retries >= MAX_RETRIES) throw e;
         }
       }
 
-      throw new Error('Max retries exceeded for session update');
+      const err = new Error('Max retries exceeded for session update');
+      console.error('[store] updateSession: Max retries exceeded:', { id });
+      throw err;
     }).catch((e) => { throw e; });
 
     // Cleanup when the chain settles
