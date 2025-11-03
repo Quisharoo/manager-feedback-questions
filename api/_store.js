@@ -86,8 +86,31 @@ async function kvList(prefix) {
       list = Array.isArray(ids) ? ids : JSON.parse(ids || '[]');
     }
   } catch (e) {
-    console.error('[store] kvList: Failed to get index', idxKey, e.message);
-    list = [];
+    // Handle WRONGTYPE error (index exists as string, not set)
+    if (e.message && e.message.includes('WRONGTYPE')) {
+      console.warn('[store] kvList: Migrating index from string to set:', idxKey);
+      // Try to migrate: read old JSON string, delete it, recreate as set
+      try {
+        const oldData = await kv.get(idxKey);
+        const oldIds = Array.isArray(oldData) ? oldData : JSON.parse(oldData || '[]');
+        // Delete the old string-based index
+        await kv.del(idxKey);
+        // Recreate as a set if we have data
+        if (oldIds.length > 0 && kv.sadd) {
+          for (const id of oldIds) {
+            await kv.sadd(idxKey, id);
+          }
+        }
+        list = oldIds;
+        console.log('[store] kvList: Migration successful, migrated', oldIds.length, 'sessions');
+      } catch (migrationError) {
+        console.error('[store] kvList: Migration failed:', migrationError.message);
+        list = [];
+      }
+    } else {
+      console.error('[store] kvList: Failed to get index', idxKey, e.message);
+      list = [];
+    }
   }
   const out = [];
   for (const id of list) {
@@ -118,7 +141,29 @@ async function kvUpsertIndex(prefix, id) {
       await kv.set(idxKey, next);
     }
   } catch (e) {
-    console.error('[store] kvUpsertIndex: Failed to add to index', idxKey, id, e.message);
+    // Handle WRONGTYPE error (index exists as string, not set)
+    if (e.message && e.message.includes('WRONGTYPE')) {
+      console.warn('[store] kvUpsertIndex: Migrating index from string to set:', idxKey);
+      try {
+        // Read old JSON string data
+        const oldData = await kv.get(idxKey);
+        const oldIds = Array.isArray(oldData) ? oldData : JSON.parse(oldData || '[]');
+        // Delete the old string-based index
+        await kv.del(idxKey);
+        // Add all old IDs plus the new one to the set
+        const allIds = new Set([...oldIds, id]);
+        if (kv.sadd) {
+          for (const sessionId of allIds) {
+            await kv.sadd(idxKey, sessionId);
+          }
+        }
+        console.log('[store] kvUpsertIndex: Migration successful, migrated', allIds.size, 'sessions');
+      } catch (migrationError) {
+        console.error('[store] kvUpsertIndex: Migration failed:', migrationError.message);
+      }
+    } else {
+      console.error('[store] kvUpsertIndex: Failed to add to index', idxKey, id, e.message);
+    }
   }
 }
 
@@ -234,7 +279,29 @@ async function kvRemoveFromIndex(prefix, id) {
       await kv.set(idxKey, next);
     }
   } catch (e) {
-    console.error('[store] kvRemoveFromIndex: Failed to remove from index', idxKey, id, e.message);
+    // Handle WRONGTYPE error (index exists as string, not set)
+    if (e.message && e.message.includes('WRONGTYPE')) {
+      console.warn('[store] kvRemoveFromIndex: Migrating index from string to set:', idxKey);
+      try {
+        // Read old JSON string data
+        const oldData = await kv.get(idxKey);
+        const oldIds = Array.isArray(oldData) ? oldData : JSON.parse(oldData || '[]');
+        // Delete the old string-based index
+        await kv.del(idxKey);
+        // Add all IDs except the one being removed to the set
+        const filteredIds = oldIds.filter(sessionId => sessionId !== id);
+        if (filteredIds.length > 0 && kv.sadd) {
+          for (const sessionId of filteredIds) {
+            await kv.sadd(idxKey, sessionId);
+          }
+        }
+        console.log('[store] kvRemoveFromIndex: Migration successful, migrated', filteredIds.length, 'sessions');
+      } catch (migrationError) {
+        console.error('[store] kvRemoveFromIndex: Migration failed:', migrationError.message);
+      }
+    } else {
+      console.error('[store] kvRemoveFromIndex: Failed to remove from index', idxKey, id, e.message);
+    }
   }
 }
 
