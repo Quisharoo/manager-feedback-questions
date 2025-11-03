@@ -60,10 +60,7 @@ console.log('[store] Storage backend initialized:', {
 
 async function kvGet(key) {
   const val = await kv.get(key);
-  if (!val) {
-    console.log('[store] kvGet: Key not found in KV:', { key });
-    return null;
-  }
+  if (!val) return null;
   try { return typeof val === 'string' ? JSON.parse(val) : val; } catch (e) {
     console.error('[store] kvGet: Failed to parse value for key', key, e.message);
     return null;
@@ -127,7 +124,6 @@ async function kvUpsertIndex(prefix, id) {
 
 async function createSession(name, extra) {
   if (useKV) {
-    console.log('[store] createSession using KV:', { name });
     const { randomUUID } = require('crypto');
     const id = randomUUID();
     const session = { id, name, asked: [], skipped: [], answers: {}, ...(extra || {}) };
@@ -135,21 +131,22 @@ async function createSession(name, extra) {
     await kvUpsertIndex('session', id);
     return session;
   }
-  console.log('[store] createSession using fileStore:', { name });
   return fileStore.createSession(name, extra || {});
 }
 
 async function getSession(id) {
-  if (useKV) {
-    console.log('[store] getSession using KV:', { id });
-    return kvGet(`session:${id}`);
-  }
-  console.log('[store] getSession using fileStore:', { id });
+  if (useKV) return kvGet(`session:${id}`);
   return fileStore.getSession(id);
 }
 
 async function saveSession(session) {
-  if (useKV) return kvSet(`session:${session.id}`, session);
+  if (useKV) {
+    // Use updateSession to maintain version consistency and avoid race conditions
+    return updateSession(session.id, (current) => {
+      // Merge the updated fields while preserving version
+      return { ...current, ...session };
+    });
+  }
   return fileStore.saveSession(session);
 }
 
