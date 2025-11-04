@@ -9,11 +9,11 @@ let kvWriteDelay = 0;
 
 const mockKv = {
   async get(key) {
-    if (kvReadDelay) await new Promise(r => setTimeout(r, kvReadDelay));
+    if (kvReadDelay > 0) await new Promise(r => setTimeout(r, kvReadDelay));
     return mockKvData.get(key);
   },
   async set(key, value) {
-    if (kvWriteDelay) await new Promise(r => setTimeout(r, kvWriteDelay));
+    if (kvWriteDelay > 0) await new Promise(r => setTimeout(r, kvWriteDelay));
     mockKvData.set(key, value);
   },
   async del(key) {

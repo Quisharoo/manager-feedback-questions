@@ -5,6 +5,13 @@
 (function(global) {
     'use strict';
 
+    // Helper function to escape HTML
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
     // Toast notification system
     function toast(msg, options = {}) {
         const duration = options.duration || 2500;
@@ -22,7 +29,7 @@
         }
 
         t.className = `fixed bottom-6 left-1/2 -translate-x-1/2 ${bgClass} text-white text-sm px-4 py-2 rounded-lg shadow-lg flex items-center z-50 animate-slide-up`;
-        t.innerHTML = `${icon}<span>${msg}</span>`;
+        t.innerHTML = `${icon}<span>${escapeHtml(msg)}</span>`;
         t.setAttribute('role', 'status');
         t.setAttribute('aria-live', 'polite');
         document.body.appendChild(t);
@@ -43,7 +50,7 @@
         loadingOverlay.innerHTML = `
             <div class="bg-white rounded-lg p-6 shadow-xl flex flex-col items-center">
                 <div class="loading-spinner-large mb-3"></div>
-                <div class="text-gray-700 text-sm">${message}</div>
+                <div class="text-gray-700 text-sm">${escapeHtml(message)}</div>
             </div>
         `;
         document.body.appendChild(loadingOverlay);
@@ -114,6 +121,7 @@
         global.toast = toast;
         global.showLoading = showLoading;
         global.hideLoading = hideLoading;
+        global.formatTimestamp = formatTimestamp;
     }
 
     // CommonJS export for tests

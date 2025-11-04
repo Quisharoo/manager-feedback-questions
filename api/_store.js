@@ -189,7 +189,13 @@ async function saveSession(session) {
     // For KV, use direct write with last-write-wins semantics
     const key = `session:${session.id}`;
     const current = await kvGet(key);
-    if (!current) return null;
+
+    // If session doesn't exist, create it with index entry
+    if (!current) {
+      await kvSet(key, session);
+      await kvUpsertIndex('session', session.id);
+      return session;
+    }
 
     const merged = { ...current, ...session };
     await kvSet(key, merged);
@@ -225,14 +231,17 @@ async function updateSession(id, updater) {
             return updated;
           }
 
-          // Use last-write-wins semantics (no version checking)
-          // In a distributed serverless environment, we can't do atomic CAS without WATCH/MULTI/EXEC
+          // WARNING: Use last-write-wins semantics (no version checking).
+          // In a distributed serverless environment, we can't do atomic CAS without WATCH/MULTI/EXEC.
+          // This means concurrent updates may overwrite each other and cause silent data loss.
           await kvSet(`session:${id}`, updated);
           return updated;
         } catch (e) {
           console.error('[store] updateSession: Error during update:', { id, retries, error: e.message });
           retries++;
           if (retries >= MAX_RETRIES) throw e;
+          // WARNING: Retrying update. In concurrent scenarios, this may cause silent data loss due to last-write-wins semantics.
+          console.warn('[store] updateSession: Retrying update. WARNING: Potential data loss if concurrent updates occur (last-write-wins).', { id, retries });
           // Small delay before retry on error
           await new Promise(resolve => setTimeout(resolve, 50 + Math.random() * 50));
         }

@@ -12,6 +12,13 @@
                 }
         }
 
+        // Helper function to format session metadata for display
+        function formatSessionOption(session) {
+                const createdDate = session.createdAt ? new Date(session.createdAt).toLocaleDateString() : '';
+                const questionsCount = session.asked && Array.isArray(session.asked) ? session.asked.length : 0;
+                return `${session.name} (${questionsCount} questions, created ${createdDate})`;
+        }
+
         function ensure(container) {
                 if (!container._sessionPicker) {
                         container._sessionPicker = {
@@ -216,13 +223,10 @@
                                 state._adminSessions.forEach(session => {
                                         const opt = document.createElement('option');
                                         opt.value = session.id;
-                                        // Format session name with creation date
-                                        const createdDate = session.createdAt ? new Date(session.createdAt).toLocaleDateString() : '';
-                                        const questionsCount = session.asked && Array.isArray(session.asked) ? session.asked.length : 0;
-                                        opt.textContent = `${session.name} (${questionsCount} questions, created ${createdDate})`;
+                                        opt.textContent = formatSessionOption(session);
                                         opt.dataset.sessionId = session.id;
                                         opt.dataset.createdAt = session.createdAt;
-                                        opt.dataset.questionsCount = questionsCount;
+                                        opt.dataset.questionsCount = session.asked && Array.isArray(session.asked) ? session.asked.length : 0;
                                         select.appendChild(opt);
                                 });
                         }
@@ -558,13 +562,10 @@
                                 sessions.forEach(session => {
                                         const opt = document.createElement('option');
                                         opt.value = session.id;
-                                        // Format session name with metadata
-                                        const createdDate = session.createdAt ? new Date(session.createdAt).toLocaleDateString() : '';
-                                        const questionsCount = session.asked && Array.isArray(session.asked) ? session.asked.length : 0;
-                                        opt.textContent = `${session.name} (${questionsCount} questions, created ${createdDate})`;
+                                        opt.textContent = formatSessionOption(session);
                                         opt.dataset.sessionId = session.id;
                                         opt.dataset.createdAt = session.createdAt;
-                                        opt.dataset.questionsCount = questionsCount;
+                                        opt.dataset.questionsCount = session.asked && Array.isArray(session.asked) ? session.asked.length : 0;
                                         select.appendChild(opt);
                                 });
                         }

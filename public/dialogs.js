@@ -636,12 +636,15 @@
         }
 
         overlay.addEventListener('keydown', (e) => {
-            // Prevent dismissing the admin dialog - must authenticate
-            if (e.key === 'Escape') { e.preventDefault(); }
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                close();
+            }
             if (e.key === 'Enter') { e.preventDefault(); confirmBtn.click(); }
         });
-        // Don't allow cancel - must provide valid admin key
-        cancelBtn.style.display = 'none';
+        cancelBtn.addEventListener('click', () => {
+            close();
+        });
         confirmBtn.addEventListener('click', async () => {
             const key = (input.value || '').trim();
             if (!key) return;
