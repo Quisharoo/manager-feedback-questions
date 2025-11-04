@@ -1,21 +1,40 @@
 (function() {
+        // SessionPicker is used only in admin mode (?admin=1) to manage capability sessions.
+        // Regular users never see this - they use showCreateSessionDialog() instead.
+
+        function isAdminMode() {
+                if (typeof window === 'undefined') return false;
+                try {
+                        const params = new URLSearchParams(window.location.search);
+                        return params.get('admin') === '1';
+                } catch {
+                        return false;
+                }
+        }
+
+        // Helper function to format session metadata for display
+        function formatSessionOption(session) {
+                const createdDate = session.createdAt ? new Date(session.createdAt).toLocaleDateString() : '';
+                const questionsCount = session.asked && Array.isArray(session.asked) ? session.asked.length : 0;
+                return `${session.name} (${questionsCount} questions, created ${createdDate})`;
+        }
+
         function ensure(container) {
                 if (!container._sessionPicker) {
-                        container._sessionPicker = { sessions: [], onOpen: function() {}, onCreate: function() {}, helperEl: null };
+                        container._sessionPicker = {
+                                _adminSessions: [],
+                                _adminKey: null,
+                                helperEl: null
+                        };
                 }
                 return container._sessionPicker;
         }
 
-        function filterSessions(list) {
-                const out = [];
-                const seen = new Set();
-                (Array.isArray(list) ? list : []).forEach(n => {
-                        const trimmed = typeof n === 'string' ? n.trim() : '';
-                        if (!trimmed || seen.has(trimmed)) return;
-                        seen.add(trimmed);
-                        out.push(trimmed);
-                });
-                return out;
+        function helperCopyForState(options) {
+                const empty = !!(options && options.empty);
+                return empty
+                        ? 'Create a new session to begin.'
+                        : 'Pick an existing session or create a new one.';
         }
 
         function renderCollapsedCreateArea(container, state) {
@@ -61,49 +80,65 @@
                 });
                 input.addEventListener('input', () => {
                         const trimmed = (input.value || '').trim();
-                        createBtn.disabled = !trimmed || (window.SessionStore && window.SessionStore.exists(trimmed));
+                        createBtn.disabled = !trimmed;
                 });
                 createBtn.addEventListener('click', async () => {
                         const name = (input.value || '').trim();
                         if (!name) return;
-                        // Always create a server session with capability key
+
+                        const isAdmin = isAdminMode();
+                        const api = (typeof window !== 'undefined' && window.SessionApi) || {};
+                        let shouldRedirect = false;
+                        let redirectLink = '';
+                        if (window.showLoading) window.showLoading('Creating session...');
                         try {
-                                const res = await fetch('/api/capsessions', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ name })
-                                });
-                                if (res.ok) {
-                                        const json = await res.json();
-                                        const links = json && json.links;
-                                        if (links && typeof links.edit === 'string' && links.edit) {
-                                                if (typeof window.openShareLinksDialog === 'function') {
-                                                        try { window.openShareLinksDialog(links); } catch (err) { console.error('share dialog failed', err); }
-                                                }
-                                                window.location.href = links.edit;
-                                                return;
-                                        }
-                                        if (json && typeof json.url === 'string' && json.url) {
-                                                window.location.href = json.url;
-                                                return;
-                                        }
-                                        // Unexpected success payload; treat as failure to avoid silent misbehaviour
-                                        alert('Failed to create session on server: unexpected response. Creating local session instead.');
-                                } else {
-                                        // Show error message to user
-                                        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
-                                        alert(`Failed to create session on server: ${errorData.error || 'Unknown error'}. Creating local session instead.`);
+                                if (typeof api.createCapabilitySession !== 'function') {
+                                        throw new Error('Session API unavailable');
                                 }
-                        } catch (e) {
-                                console.error('Failed to create session:', e);
-                                alert(`Failed to create session on server: ${e.message}. Creating local session instead.`);
+                                const result = await api.createCapabilitySession(name);
+                                const links = result && result.links ? result.links : null;
+                                if (!links || !links.edit) {
+                                        throw new Error('Capability link not returned');
+                                }
+                                if (typeof window.openShareLinksDialog === 'function') {
+                                        try { window.openShareLinksDialog(links); } catch (err) { console.error('share dialog failed', err); }
+                                }
+                                if (isAdmin) {
+                                        try {
+                                                const adminKey = sessionStorage.getItem('mfq_admin_key');
+                                                if (adminKey && typeof api.fetchAdminSessions === 'function') {
+                                                        const data = await api.fetchAdminSessions(adminKey);
+                                                        const sessions = Array.isArray(data.sessions) ? data.sessions : [];
+                                                        SessionPicker.setAdminSessions(container, sessions, adminKey);
+                                                        const tabExisting = container.querySelector('#tab-existing');
+                                                        if (tabExisting && typeof tabExisting.click === 'function') {
+                                                                setTimeout(() => { try { tabExisting.click(); } catch {} }, 100);
+                                                        }
+                                                }
+                                        } catch (refreshErr) {
+                                                console.error('Failed to refresh sessions:', refreshErr);
+                                                if (window.toast) window.toast('Session created, but failed to refresh admin list.', { type: 'error', duration: 4000 });
+                                        }
+                                        if (window.toast) {
+                                                window.toast('Session created! It now appears in the Existing tab. Remember to save the capability link!', { type: 'success', duration: 4000 });
+                                        }
+                                } else {
+                                        shouldRedirect = true;
+                                        redirectLink = links.edit;
+                                }
+                        } catch (err) {
+                                console.error('Failed to create session:', err);
+                                if (window.toast) window.toast(`Failed to create session: ${err && err.message ? err.message : 'Unknown error'}`, { type: 'error', duration: 4000 });
+                        } finally {
+                                if (window.hideLoading) window.hideLoading();
+                                input.value = '';
+                                createBtn.disabled = true;
+                                form.classList.add('hidden');
+                                toggleBtn.classList.remove('hidden');
+                                if (shouldRedirect && redirectLink) {
+                                        window.location.href = redirectLink;
+                                }
                         }
-                        // Fallback to local session if server creation fails
-                        state.onCreate && state.onCreate(name);
-                        input.value = '';
-                        createBtn.disabled = true;
-                        form.classList.add('hidden');
-                        toggleBtn.classList.remove('hidden');
                 });
 
                 area.appendChild(toggleBtn);
@@ -112,15 +147,39 @@
         }
 
         const SessionPicker = {
-                render(container, { sessions = [], onOpen, onCreate } = {}) {
+                render(container) {
                         const state = ensure(container);
-                        state.sessions = filterSessions(sessions);
-                        state.onOpen = typeof onOpen === 'function' ? onOpen : function() {};
-                        state.onCreate = typeof onCreate === 'function' ? onCreate : function() {};
 
                         container.innerHTML = '';
                         const card = document.createElement('div');
                         card.className = 'bg-white rounded-xl shadow p-4';
+
+                        const isAdmin = isAdminMode();
+                        const hasAdminSessions = Array.isArray(state._adminSessions) && state._adminSessions.length > 0;
+
+                        // Add admin mode banner at the top
+                        if (isAdmin) {
+                                const banner = document.createElement('div');
+                                banner.className = 'mb-4 bg-blue-50 border-l-4 border-blue-500 p-3 rounded';
+                                banner.innerHTML = `
+                                        <div class="flex items-start gap-3">
+                                                <div class="text-blue-500 text-xl mt-0.5">
+                                                        <i class="fas fa-info-circle"></i>
+                                                </div>
+                                                <div>
+                                                        <h3 class="text-sm font-semibold text-blue-900 mb-1">Session Management Panel</h3>
+                                                        <p class="text-xs text-blue-800 leading-relaxed">
+                                                                This panel is for creating and managing sessions. Sessions are accessed via their
+                                                                unique share links (shown when you create a session).
+                                                        </p>
+                                                        <p class="text-xs text-blue-800 font-medium mt-1">
+                                                                You cannot "open" sessions from this panel - use the share link instead.
+                                                        </p>
+                                                </div>
+                                        </div>
+                                `;
+                                card.appendChild(banner);
+                        }
 
                         // Segmented control as tablist
                         const tablist = document.createElement('div');
@@ -149,29 +208,25 @@
                         selectRow.className = 'flex items-center gap-2';
                         const select = document.createElement('select');
                         select.id = 'sessionSelect';
-                        select.className = 'flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400';
+
+                        // In admin mode, add visual indication that sessions are locked
+                        const selectClass = isAdmin
+                                ? 'flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-gray-50'
+                                : 'flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400';
+                        select.className = selectClass;
                         const none = document.createElement('option');
                         none.value = '';
                         none.textContent = '— Select session —';
                         select.appendChild(none);
-
-                        // Check if we're in admin mode and have server sessions
-                        const isAdmin = state._adminSessions && Array.isArray(state._adminSessions);
-                        if (isAdmin) {
-                                // Show server sessions
+                        if (hasAdminSessions) {
+                                // Show server sessions with metadata
                                 state._adminSessions.forEach(session => {
                                         const opt = document.createElement('option');
                                         opt.value = session.id;
-                                        opt.textContent = session.name;
+                                        opt.textContent = formatSessionOption(session);
                                         opt.dataset.sessionId = session.id;
-                                        select.appendChild(opt);
-                                });
-                        } else {
-                                // Show local sessions
-                                state.sessions.forEach(name => {
-                                        const opt = document.createElement('option');
-                                        opt.value = name;
-                                        opt.textContent = name;
+                                        opt.dataset.createdAt = session.createdAt;
+                                        opt.dataset.questionsCount = session.asked && Array.isArray(session.asked) ? session.asked.length : 0;
                                         select.appendChild(opt);
                                 });
                         }
@@ -181,19 +236,40 @@
                         openBtn.className = 'btn-primary text-white font-semibold px-4 py-2 rounded disabled:opacity-50';
                         openBtn.textContent = 'Open session';
                         openBtn.disabled = true;
+                        // In admin mode, hide open button entirely (sessions can only be accessed via capability links)
+                        if (isAdmin) {
+                                openBtn.style.display = 'none';
+                        }
                         const deleteBtn = document.createElement('button');
                         deleteBtn.id = 'deleteSessionBtn';
                         deleteBtn.type = 'button';
                         deleteBtn.className = 'px-3 py-2 rounded border border-red-300 text-red-700 disabled:opacity-50';
                         deleteBtn.textContent = 'Delete';
                         deleteBtn.disabled = true;
-                        select.addEventListener('change', () => { openBtn.disabled = !select.value; });
+                        select.addEventListener('change', () => {
+                                if (!isAdmin) {
+                                        openBtn.disabled = !select.value;
+                                }
+                        });
                         select.addEventListener('change', () => { deleteBtn.disabled = !select.value; });
-                        openBtn.addEventListener('click', () => { if (select.value) state.onOpen && state.onOpen(select.value); });
+                        openBtn.addEventListener('click', () => {
+                                // In admin mode, show error toast (button is hidden but handler exists for safety)
+                                if (window.toast) {
+                                        window.toast('Sessions can only be accessed via their unique capability link. Use the share link shown when you created the session.', { type: 'error', duration: 5000 });
+                                }
+                        });
                         // Enter on select opens
                         select.addEventListener('keydown', (e) => {
                                 if (e.key === 'Enter' && select.value) { e.preventDefault(); openBtn.click(); }
                         });
+                        // In admin mode, add lock icon before select
+                        if (isAdmin) {
+                                const lockIcon = document.createElement('span');
+                                lockIcon.className = 'text-gray-500 text-sm';
+                                lockIcon.innerHTML = '<i class="fas fa-lock"></i>';
+                                lockIcon.title = 'View-only mode';
+                                selectRow.appendChild(lockIcon);
+                        }
                         selectRow.appendChild(select);
                         selectRow.appendChild(openBtn);
                         selectRow.appendChild(deleteBtn);
@@ -278,10 +354,11 @@
                                         const state = ensure(container);
                                         const isAdmin = state._adminSessions && state._adminKey;
 
-                                        if (isAdmin) {
-                                                // Delete server session
-                                                const sessionId = name; // In admin mode, value is the session ID
-                                                try {
+                                        if (window.showLoading) window.showLoading('Deleting session...');
+                                        try {
+                                                if (isAdmin) {
+                                                        // Delete server session
+                                                        const sessionId = name; // In admin mode, value is the session ID
                                                         const res = await fetch(`/api/admin/sessions/${sessionId}`, {
                                                                 method: 'DELETE',
                                                                 headers: { Authorization: 'Key ' + state._adminKey }
@@ -298,30 +375,38 @@
                                                                 select.value = '';
                                                                 openBtn.disabled = true;
                                                                 deleteBtn.disabled = true;
+                                                                if (window.toast) window.toast(`Deleted session ${name}`, { type: 'success' });
+                                                        } else {
+                                                                throw new Error('Failed to delete session');
                                                         }
-                                                } catch (e) {
-                                                        console.error('Failed to delete session:', e);
+                                                } else if (window.SessionStore && typeof window.SessionStore.remove === 'function') {
+                                                        // Delete local session
+                                                        window.SessionStore.remove(name);
+                                                        select.value = '';
+                                                        openBtn.disabled = true;
+                                                        deleteBtn.disabled = true;
+                                                        SessionPicker.updateSessions(container, window.SessionStore.getAll());
+                                                        if (window.toast) {
+                                                                window.toast(`Deleted session ${name}`, { type: 'success' });
+                                                        } else if (window.AskedList && typeof window.AskedList.toast === 'function') {
+                                                                window.AskedList.toast(document.body, `Deleted session ${name}`);
+                                                        } else {
+                                                                const toast = document.createElement('div');
+                                                                toast.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-sm px-3 py-1.5 rounded shadow';
+                                                                toast.textContent = `Deleted session ${name}`;
+                                                                document.body.appendChild(toast);
+                                                                setTimeout(() => { toast.remove(); }, 2000);
+                                                        }
                                                 }
-                                        } else if (window.SessionStore && typeof window.SessionStore.remove === 'function') {
-                                                // Delete local session
-                                                window.SessionStore.remove(name);
-                                                select.value = '';
-                                                openBtn.disabled = true;
-                                                deleteBtn.disabled = true;
-                                                SessionPicker.updateSessions(container, window.SessionStore.getAll());
-                                        }
-                                        if (typeof window.__activeSessionName === 'string' && window.__activeSessionName === name) {
-                                                const ev = new CustomEvent('session-deleted', { detail: { name } });
-                                                window.dispatchEvent(ev);
-                                        }
-                                        if (window.AskedList && typeof window.AskedList.toast === 'function') {
-                                                window.AskedList.toast(document.body, `Deleted session ${name}`);
-                                        } else {
-                                                const toast = document.createElement('div');
-                                                toast.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-sm px-3 py-1.5 rounded shadow';
-                                                toast.textContent = `Deleted session ${name}`;
-                                                document.body.appendChild(toast);
-                                                setTimeout(() => { toast.remove(); }, 2000);
+                                                if (typeof window.__activeSessionName === 'string' && window.__activeSessionName === name) {
+                                                        const ev = new CustomEvent('session-deleted', { detail: { name } });
+                                                        window.dispatchEvent(ev);
+                                                }
+                                        } catch (e) {
+                                                console.error('Failed to delete session:', e);
+                                                if (window.toast) window.toast('Failed to delete session', { type: 'error' });
+                                        } finally {
+                                                if (window.hideLoading) window.hideLoading();
                                         }
                                         if (select && typeof select.focus === 'function') { try { select.focus(); } catch {} }
                                 });
@@ -349,37 +434,63 @@
                         createBtn.disabled = true;
                         input.addEventListener('input', () => {
                                 const trimmed = (input.value || '').trim();
-                                createBtn.disabled = !trimmed || (window.SessionStore && window.SessionStore.exists(trimmed));
+                                createBtn.disabled = !trimmed;
                         });
                         async function submitCreate() {
                                 const name = (input.value || '').trim();
                                 if (!name) return;
-                                // Always create a server session with capability key
+
+                                const isAdmin = isAdminMode();
+                                const api = (typeof window !== 'undefined' && window.SessionApi) || {};
+                                let shouldRedirect = false;
+                                let redirectLink = '';
+                                if (window.showLoading) window.showLoading('Creating session...');
                                 try {
-                                        const res = await fetch('/api/capsessions', {
-                                                method: 'POST',
-                                                headers: { 'Content-Type': 'application/json' },
-                                                body: JSON.stringify({ name })
-                                        });
-                                        if (res.ok) {
-                                                const json = await res.json();
-                                                if (json && json.url) {
-                                                        window.location.href = json.url;
-                                                        return;
+                                        if (typeof api.createCapabilitySession !== 'function') {
+                                                throw new Error('Session API unavailable');
+                                        }
+                                        const result = await api.createCapabilitySession(name);
+                                        const links = result && result.links ? result.links : null;
+                                        if (!links || !links.edit) {
+                                                throw new Error('Capability link not returned');
+                                        }
+                                        if (typeof window.openShareLinksDialog === 'function') {
+                                                try { window.openShareLinksDialog(links); } catch (err) { console.error('share dialog failed', err); }
+                                        }
+                                        if (isAdmin) {
+                                                try {
+                                                        const adminKey = sessionStorage.getItem('mfq_admin_key');
+                                                        if (adminKey && typeof api.fetchAdminSessions === 'function') {
+                                                                const data = await api.fetchAdminSessions(adminKey);
+                                                                const sessions = Array.isArray(data.sessions) ? data.sessions : [];
+                                                                SessionPicker.setAdminSessions(container, sessions, adminKey);
+                                                                const tabExisting = container.querySelector('#tab-existing');
+                                                                if (tabExisting && typeof tabExisting.click === 'function') {
+                                                                        setTimeout(() => { try { tabExisting.click(); } catch {} }, 100);
+                                                                }
+                                                        }
+                                                } catch (refreshErr) {
+                                                        console.error('Failed to refresh sessions:', refreshErr);
+                                                        if (window.toast) window.toast('Session created, but failed to refresh admin list.', { type: 'error', duration: 4000 });
+                                                }
+                                                if (window.toast) {
+                                                        window.toast('Session created! It now appears in the Existing tab. Remember to save the capability link!', { type: 'success', duration: 4000 });
                                                 }
                                         } else {
-                                                // Show error message to user
-                                                const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
-                                                alert(`Failed to create session on server: ${errorData.error || 'Unknown error'}. Creating local session instead.`);
+                                                shouldRedirect = true;
+                                                redirectLink = links.edit;
                                         }
-                                } catch (e) {
-                                        console.error('Failed to create session:', e);
-                                        alert(`Failed to create session on server: ${e.message}. Creating local session instead.`);
+                                } catch (err) {
+                                        console.error('Failed to create session:', err);
+                                        if (window.toast) window.toast(`Failed to create session: ${err && err.message ? err.message : 'Unknown error'}`, { type: 'error', duration: 4000 });
+                                } finally {
+                                        if (window.hideLoading) window.hideLoading();
+                                        input.value = '';
+                                        createBtn.disabled = true;
+                                        if (shouldRedirect && redirectLink) {
+                                                window.location.href = redirectLink;
+                                        }
                                 }
-                                // Fallback to local session if server creation fails
-                                state.onCreate && state.onCreate(name);
-                                input.value = '';
-                                createBtn.disabled = true;
                         }
                         createBtn.addEventListener('click', submitCreate);
                         input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !createBtn.disabled) { e.preventDefault(); submitCreate(); } });
@@ -390,7 +501,7 @@
                         const helper = document.createElement('div');
                         helper.className = 'text-xs text-gray-500 mt-2';
                         helper.id = 'sessionPickerHelper';
-                        helper.textContent = 'Pick an existing session or create a new one.';
+                        helper.textContent = helperCopyForState({ empty: false });
                         state.helperEl = helper;
 
                         // Tab interactions
@@ -422,59 +533,18 @@
                         container.appendChild(card);
 
                         // Default to New tab if no sessions exist; otherwise Existing
-                        const hasAdminSessions = state._adminSessions && state._adminSessions.length > 0;
-                        const hasSessions = state.sessions.length > 0 || hasAdminSessions;
-                        if (!hasSessions) {
+                        if (!hasAdminSessions) {
                                 // hide Existing tab and panel fully
                                 tabExisting.classList.add('hidden');
                                 panelExisting.classList.add('hidden');
                                 activate('new');
-                                helper.textContent = 'Create a new session to begin.';
+                                helper.textContent = helperCopyForState({ empty: true });
                                 setTimeout(() => { try { input.focus(); } catch {} }, 0);
                         } else {
                                 // show Existing tab
                                 tabExisting.classList.remove('hidden');
                                 activate('existing');
-                                helper.textContent = 'Pick an existing session or create a new one.';
-                        }
-                },
-                updateSessions(container, sessions) {
-                        const state = ensure(container);
-                        state.sessions = filterSessions(sessions);
-                        const select = container.querySelector('#sessionSelect');
-                        if (select) {
-                                const current = select.value;
-                                select.innerHTML = '';
-                                const none = document.createElement('option');
-                                none.value = '';
-                                none.textContent = '— Select session —';
-                                select.appendChild(none);
-                                state.sessions.forEach(name => {
-                                        const opt = document.createElement('option');
-                                        opt.value = name;
-                                        opt.textContent = name;
-                                        select.appendChild(opt);
-                                });
-                                if (state.sessions.includes(current)) select.value = current;
-                        }
-                        // Update helper, tabs, and panel visibility depending on session count
-                        const helper = state.helperEl || container.querySelector('#sessionPickerHelper');
-                        const tabExisting = container.querySelector('#tab-existing');
-                        const tabNew = container.querySelector('#tab-new');
-                        const panelExisting = container.querySelector('[role="tabpanel"][aria-labelledby="tab-existing"]');
-                        const panelNew = container.querySelector('[role="tabpanel"][aria-labelledby="tab-new"]');
-                        if (state.sessions.length === 0) {
-                                if (helper) helper.textContent = 'Create a new session to begin.';
-                                if (tabExisting) tabExisting.classList.add('hidden');
-                                if (panelExisting) panelExisting.classList.add('hidden');
-                                if (tabNew) {
-                                        tabNew.setAttribute('aria-selected', 'true');
-                                        tabNew.className = 'px-3 py-1.5 text-sm bg-indigo-50 text-indigo-700';
-                                }
-                                if (panelNew) panelNew.classList.remove('hidden');
-                        } else {
-                                if (helper) helper.textContent = 'Pick an existing session or create a new one.';
-                                if (tabExisting) tabExisting.classList.remove('hidden');
+                                helper.textContent = helperCopyForState({ empty: false });
                         }
                 },
                 setAdminSessions(container, sessions, adminKey) {
@@ -487,25 +557,39 @@
                                 select.innerHTML = '';
                                 const none = document.createElement('option');
                                 none.value = '';
-                                none.textContent = '— Select session —';
+                                none.textContent = sessions.length === 0 ? '— No sessions yet —' : '— Select session —';
                                 select.appendChild(none);
                                 sessions.forEach(session => {
                                         const opt = document.createElement('option');
                                         opt.value = session.id;
-                                        opt.textContent = session.name;
+                                        opt.textContent = formatSessionOption(session);
                                         opt.dataset.sessionId = session.id;
+                                        opt.dataset.createdAt = session.createdAt;
+                                        opt.dataset.questionsCount = session.asked && Array.isArray(session.asked) ? session.asked.length : 0;
                                         select.appendChild(opt);
                                 });
                         }
-                        // Show the Existing tab and activate it
+                        // ALWAYS show both tabs in admin mode after authentication
                         const tabExisting = container.querySelector('#tab-existing');
                         const tabNew = container.querySelector('#tab-new');
                         const panelExisting = container.querySelector('[role="tabpanel"][aria-labelledby="tab-existing"]');
                         const panelNew = container.querySelector('[role="tabpanel"][aria-labelledby="tab-new"]');
                         const helper = state.helperEl || container.querySelector('#sessionPickerHelper');
+
+                        // Always show both tabs and update their labels with counts
+                        if (tabExisting) {
+                                tabExisting.classList.remove('hidden');
+                                tabExisting.textContent = `Existing (${sessions.length})`;
+                        }
+                        if (tabNew) {
+                                tabNew.classList.remove('hidden');
+                                tabNew.textContent = 'New';
+                        }
+
+                        // Activate appropriate tab based on session count
                         if (sessions.length > 0) {
+                                // Has sessions - show Existing tab
                                 if (tabExisting) {
-                                        tabExisting.classList.remove('hidden');
                                         tabExisting.setAttribute('aria-selected', 'true');
                                         tabExisting.classList.remove('text-gray-600');
                                         tabExisting.classList.add('bg-indigo-50', 'text-indigo-700');
@@ -517,7 +601,36 @@
                                 }
                                 if (panelExisting) panelExisting.classList.remove('hidden');
                                 if (panelNew) panelNew.classList.add('hidden');
-                                if (helper) helper.textContent = 'Pick an existing session or create a new one.';
+                                // BUG FIX #3: Add admin mode helper text
+                                if (helper) {
+                                        helper.innerHTML = `
+                                                <div class="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                                                        <strong><i class="fas fa-info-circle mr-1"></i> Admin mode:</strong> Sessions can only be accessed via their capability links (shown once at creation). You can create new sessions or delete existing ones.
+                                                </div>
+                                        `;
+                                }
+                        } else {
+                                // No sessions - show New tab, but keep Existing visible
+                                if (tabExisting) {
+                                        tabExisting.setAttribute('aria-selected', 'false');
+                                        tabExisting.classList.remove('bg-indigo-50', 'text-indigo-700');
+                                        tabExisting.classList.add('text-gray-600');
+                                }
+                                if (tabNew) {
+                                        tabNew.setAttribute('aria-selected', 'true');
+                                        tabNew.classList.remove('text-gray-600');
+                                        tabNew.classList.add('bg-indigo-50', 'text-indigo-700');
+                                }
+                                if (panelExisting) panelExisting.classList.add('hidden');
+                                if (panelNew) panelNew.classList.remove('hidden');
+                                // BUG FIX #3: Add admin mode helper text
+                                if (helper) {
+                                        helper.innerHTML = `
+                                                <div class="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                                                        <strong><i class="fas fa-info-circle mr-1"></i> Admin mode:</strong> Create your first session below. The capability link will be shown once - save it immediately!
+                                                </div>
+                                        `;
+                                }
                         }
                 }
         };

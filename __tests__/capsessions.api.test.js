@@ -61,9 +61,12 @@ describe('serverless /api/capsessions', () => {
     expect(created.links.edit).toBeTruthy();
     expect(created.links.view).toBeTruthy();
     const url = new URL(created.links.edit, 'http://x');
+    const viewUrl = new URL(created.links.view, 'http://x');
     const id = created.id;
     const key = url.searchParams.get('key');
     expect(key).toBeTruthy();
+    expect(url.searchParams.get('cap')).toBe('1');
+    expect(viewUrl.searchParams.get('cap')).toBe('1');
 
     // GET without key forbidden
     const getForbiddenReq = makeReq({ method: 'GET', url: `/api/capsessions/${id}`, query: { id } });
@@ -151,4 +154,3 @@ describe('serverless /api/capsessions', () => {
     expect(getRes.statusCode).toBe(403);
   });
 });
-

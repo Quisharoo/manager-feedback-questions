@@ -30,8 +30,10 @@ describe('server admin/session keys (env-gated)', () => {
     const create = await request(app).post('/api/sessions').send({ name: 'A' }).set('Content-Type', 'application/json').set('Authorization', 'Key admin-secret');
     const id = create.body.id;
     const editUrl = String(create.body.links.edit || '');
-    const sessionKey = new URL(editUrl, 'http://x').searchParams.get('key');
+    const parsedEdit = new URL(editUrl, 'http://x');
+    const sessionKey = parsedEdit.searchParams.get('key');
     expect(sessionKey).toBeTruthy();
+    expect(parsedEdit.searchParams.get('cap')).toBe('1');
 
     const getForbidden = await request(app).get(`/api/sessions/${id}`);
     expect([403, 200]).toContain(getForbidden.status); // If no keys on session, would be 200; here keys exist so expect 403

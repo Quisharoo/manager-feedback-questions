@@ -6,7 +6,7 @@ describe('Server-mode UI: answers load and persist with unique link', () => {
   const FIRST_Q = "Am I giving you enough information to do your job well?";
 
   beforeEach(() => {
-    // Reset DOM and URL to include cap session params
+    // Reset DOM and URL to include capability session params
     document.body.innerHTML = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
     window.history.pushState({}, '', '/?id=test-session-1&key=test-key-1&cap=1');
     jest.resetModules();
@@ -46,6 +46,9 @@ describe('Server-mode UI: answers load and persist with unique link', () => {
     require('../public/sessionStore');
     require('../public/selectionUtils');
     require('../public/askedList');
+    require('../public/sessionApi');
+    require('../public/ui-utils');
+    require('../public/dialogs');
     require('../public/sessionPicker');
     require('../public/script');
   });
@@ -65,6 +68,9 @@ describe('Server-mode UI: answers load and persist with unique link', () => {
     expect(textarea).toBeTruthy();
     // Initial value should come from server-provided answers
     expect(textarea.value).toBe('Server notes');
+    const resultsBtn = document.getElementById('resultsBtn');
+    expect(resultsBtn).toBeTruthy();
+    expect(new URL(resultsBtn.href).searchParams.get('cap')).toBe('1');
 
     // Edit and blur -> should PATCH to server
     textarea.value = 'Edited on client';
@@ -129,5 +135,3 @@ describe('Server-mode UI: answers load and persist with unique link', () => {
     expect(resetCall).toBeTruthy();
   });
 });
-
-

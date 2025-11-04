@@ -1,3 +1,6 @@
+// Load environment variables from .env file
+require('dotenv').config();
+
 const express = require('express');
 const path = require('path');
 const { createSession, getSession, saveSession, updateSession, listSessions, deleteSession } = require('./server/sessionStore');
@@ -67,7 +70,10 @@ app.post('/api/admin/sessions', (req, res) => {
   auditLog('session.create', { sessionId: session.id, sessionName: name, admin: true }, req);
 
   const base = `${req.protocol || 'http'}://${req.headers.host}`;
-  const links = { edit: `${base}/?id=${session.id}&key=${editKey}&cap=1`, view: `${base}/results.html?id=${session.id}&key=${viewKey}&cap=1` };
+  const links = {
+    edit: `${base}/?id=${session.id}&key=${editKey}&cap=1`,
+    view: `${base}/results.html?id=${session.id}&key=${viewKey}&cap=1`
+  };
   res.status(201).json({ ...session, links });
 });
 
@@ -125,7 +131,10 @@ app.post('/api/sessions', (req, res) => {
   const extra = editKeyHash ? { editKeyHash, viewKeyHash, createdAt: Date.now(), lastAccess: Date.now(), answers: {} } : { answers: {} };
   const session = createSession(name, extra);
   const base = `${req.protocol || 'http'}://${req.headers.host}`;
-  const links = editKey ? { edit: `${base}/?id=${session.id}&key=${editKey}`, view: `${base}/results.html?id=${session.id}&key=${viewKey}` } : undefined;
+  const links = editKey ? {
+    edit: `${base}/?id=${session.id}&key=${editKey}&cap=1`,
+    view: `${base}/results.html?id=${session.id}&key=${viewKey}&cap=1`
+  } : undefined;
   res.status(201).json(links ? { ...session, links } : session);
 });
 

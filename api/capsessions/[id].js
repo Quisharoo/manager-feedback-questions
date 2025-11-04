@@ -49,12 +49,15 @@ module.exports = async (req, res) => {
 
     const updated = await store.updateSession(id, (s) => {
       return applySessionAction(s, action, question, value);
-    }).catch(() => null);
+    }).catch((err) => {
+      console.error('[capsessions] updateSession failed:', { id, error: err.message });
+      return null;
+    });
 
     if (!updated) {
       res.statusCode = 404;
       res.setHeader('Content-Type', 'application/json');
-      return res.end(JSON.stringify({ error: 'Not found' }));
+      return res.end(JSON.stringify({ error: 'Session not found or update failed' }));
     }
 
     // Check if validation failed

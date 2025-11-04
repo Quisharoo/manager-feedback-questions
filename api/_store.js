@@ -48,6 +48,16 @@ if (!useKV) {
   fileStore = require(path.join('..', 'server', 'sessionStore'));
 }
 
+// Log storage backend on module load
+console.log('[store] Storage backend initialized:', {
+  useKV,
+  hasKV: !!kv,
+  hasFileStore: !!fileStore,
+  vercel: !!process.env.VERCEL,
+  kvUrl: process.env.KV_REST_API_URL ? 'set' : 'not set',
+  upstashUrl: process.env.UPSTASH_REDIS_REST_URL ? 'set' : 'not set'
+});
+
 async function kvGet(key) {
   const val = await kv.get(key);
   if (!val) return null;
@@ -76,8 +86,31 @@ async function kvList(prefix) {
       list = Array.isArray(ids) ? ids : JSON.parse(ids || '[]');
     }
   } catch (e) {
-    console.error('[store] kvList: Failed to get index', idxKey, e.message);
-    list = [];
+    // Handle WRONGTYPE error (index exists as string, not set)
+    if (e.message && e.message.includes('WRONGTYPE')) {
+      console.warn('[store] kvList: Migrating index from string to set:', idxKey);
+      // Try to migrate: read old JSON string, delete it, recreate as set
+      try {
+        const oldData = await kv.get(idxKey);
+        const oldIds = Array.isArray(oldData) ? oldData : JSON.parse(oldData || '[]');
+        // Delete the old string-based index
+        await kv.del(idxKey);
+        // Recreate as a set if we have data
+        if (oldIds.length > 0 && kv.sadd) {
+          for (const id of oldIds) {
+            await kv.sadd(idxKey, id);
+          }
+        }
+        list = oldIds;
+        console.log('[store] kvList: Migration successful, migrated', oldIds.length, 'sessions');
+      } catch (migrationError) {
+        console.error('[store] kvList: Migration failed:', migrationError.message);
+        list = [];
+      }
+    } else {
+      console.error('[store] kvList: Failed to get index', idxKey, e.message);
+      list = [];
+    }
   }
   const out = [];
   for (const id of list) {
@@ -108,7 +141,29 @@ async function kvUpsertIndex(prefix, id) {
       await kv.set(idxKey, next);
     }
   } catch (e) {
-    console.error('[store] kvUpsertIndex: Failed to add to index', idxKey, id, e.message);
+    // Handle WRONGTYPE error (index exists as string, not set)
+    if (e.message && e.message.includes('WRONGTYPE')) {
+      console.warn('[store] kvUpsertIndex: Migrating index from string to set:', idxKey);
+      try {
+        // Read old JSON string data
+        const oldData = await kv.get(idxKey);
+        const oldIds = Array.isArray(oldData) ? oldData : JSON.parse(oldData || '[]');
+        // Delete the old string-based index
+        await kv.del(idxKey);
+        // Add all old IDs plus the new one to the set
+        const allIds = new Set([...oldIds, id]);
+        if (kv.sadd) {
+          for (const sessionId of allIds) {
+            await kv.sadd(idxKey, sessionId);
+          }
+        }
+        console.log('[store] kvUpsertIndex: Migration successful, migrated', allIds.size, 'sessions');
+      } catch (migrationError) {
+        console.error('[store] kvUpsertIndex: Migration failed:', migrationError.message);
+      }
+    } else {
+      console.error('[store] kvUpsertIndex: Failed to add to index', idxKey, id, e.message);
+    }
   }
 }
 
@@ -130,7 +185,22 @@ async function getSession(id) {
 }
 
 async function saveSession(session) {
-  if (useKV) return kvSet(`session:${session.id}`, session);
+  if (useKV) {
+    // For KV, use direct write with last-write-wins semantics
+    const key = `session:${session.id}`;
+    const current = await kvGet(key);
+
+    // If session doesn't exist, create it with index entry
+    if (!current) {
+      await kvSet(key, session);
+      await kvUpsertIndex('session', session.id);
+      return session;
+    }
+
+    const merged = { ...current, ...session };
+    await kvSet(key, merged);
+    return merged;
+  }
   return fileStore.saveSession(session);
 }
 
@@ -139,51 +209,47 @@ const kvUpdateLocks = new Map();
 
 async function updateSession(id, updater) {
   if (useKV) {
-    // Use promise chaining to serialize updates per session (same as fileStore)
+    // Use promise chaining to serialize updates per session within this Lambda instance
+    // Note: This doesn't provide cross-Lambda serialization, but helps reduce contention
     const last = kvUpdateLocks.get(id) || Promise.resolve();
     const next = last.then(async () => {
       const MAX_RETRIES = 3;
       let retries = 0;
 
       while (retries < MAX_RETRIES) {
-        const current = await kvGet(`session:${id}`);
-        if (!current) return null;
-
-        // Add version to session if not present
-        if (typeof current._version !== 'number') {
-          current._version = 0;
-        }
-
-        const currentVersion = current._version;
-        const updated = updater(current);
-
-        // Check if updater returned an error
-        if (!updated || (updated.error && !updated.id)) {
-          return updated;
-        }
-
-        // Increment version for optimistic locking
-        updated._version = currentVersion + 1;
-
         try {
-          // Try to save with version check
-          // Note: Basic implementation - ideally use Redis WATCH/MULTI/EXEC for true atomicity
-          const checkCurrent = await kvGet(`session:${id}`);
-          if (checkCurrent && checkCurrent._version !== currentVersion) {
-            // Version mismatch - someone else updated, retry
-            retries++;
-            continue;
+          const current = await kvGet(`session:${id}`);
+          if (!current) {
+            console.error('[store] updateSession: Session not found in KV:', { id });
+            return null;
           }
 
+          const updated = updater(current);
+
+          // Check if updater returned an error
+          if (!updated || (updated.error && !updated.id)) {
+            return updated;
+          }
+
+          // WARNING: Use last-write-wins semantics (no version checking).
+          // In a distributed serverless environment, we can't do atomic CAS without WATCH/MULTI/EXEC.
+          // This means concurrent updates may overwrite each other and cause silent data loss.
           await kvSet(`session:${id}`, updated);
           return updated;
         } catch (e) {
+          console.error('[store] updateSession: Error during update:', { id, retries, error: e.message });
           retries++;
           if (retries >= MAX_RETRIES) throw e;
+          // WARNING: Retrying update. In concurrent scenarios, this may cause silent data loss due to last-write-wins semantics.
+          console.warn('[store] updateSession: Retrying update. WARNING: Potential data loss if concurrent updates occur (last-write-wins).', { id, retries });
+          // Small delay before retry on error
+          await new Promise(resolve => setTimeout(resolve, 50 + Math.random() * 50));
         }
       }
 
-      throw new Error('Max retries exceeded for session update');
+      const err = new Error('Max retries exceeded for session update');
+      console.error('[store] updateSession: Max retries exceeded:', { id });
+      throw err;
     }).catch((e) => { throw e; });
 
     // Cleanup when the chain settles
@@ -222,7 +288,29 @@ async function kvRemoveFromIndex(prefix, id) {
       await kv.set(idxKey, next);
     }
   } catch (e) {
-    console.error('[store] kvRemoveFromIndex: Failed to remove from index', idxKey, id, e.message);
+    // Handle WRONGTYPE error (index exists as string, not set)
+    if (e.message && e.message.includes('WRONGTYPE')) {
+      console.warn('[store] kvRemoveFromIndex: Migrating index from string to set:', idxKey);
+      try {
+        // Read old JSON string data
+        const oldData = await kv.get(idxKey);
+        const oldIds = Array.isArray(oldData) ? oldData : JSON.parse(oldData || '[]');
+        // Delete the old string-based index
+        await kv.del(idxKey);
+        // Add all IDs except the one being removed to the set
+        const filteredIds = oldIds.filter(sessionId => sessionId !== id);
+        if (filteredIds.length > 0 && kv.sadd) {
+          for (const sessionId of filteredIds) {
+            await kv.sadd(idxKey, sessionId);
+          }
+        }
+        console.log('[store] kvRemoveFromIndex: Migration successful, migrated', filteredIds.length, 'sessions');
+      } catch (migrationError) {
+        console.error('[store] kvRemoveFromIndex: Migration failed:', migrationError.message);
+      }
+    } else {
+      console.error('[store] kvRemoveFromIndex: Failed to remove from index', idxKey, id, e.message);
+    }
   }
 }
 

@@ -15,8 +15,9 @@
         <div class="text-center mb-8">
             <h1 class="text-4xl md:text-5xl font-bold text-indigo-600 mb-2">Manager Feedback Questions</h1>
             <p class="text-gray-600 text-lg">Get questions to improve your management and team dynamics</p>
-            <div id="adminBanner" class="hidden mt-2 text-xs text-white bg-indigo-600 inline-flex items-center gap-2 px-2 py-1 rounded">
-                <span>Admin mode</span>
+            <div id="adminBanner" class="hidden mt-2 text-xs text-white bg-indigo-600 inline-flex items-center gap-2 px-3 py-1.5 rounded-full shadow-md" title="Managing sessions - Cannot access sessions without share links">
+                <i class="fas fa-cog"></i>
+                <span class="font-medium">Session Management</span>
             </div>
         </div>
         
@@ -34,7 +35,12 @@
             <div class="md:col-span-2">
                 <div class="bg-white rounded-xl shadow-xl overflow-hidden mb-4 question-card">
                     <div class="p-4 border-b border-gray-100 flex items-center justify-between">
-                        <div id="sessionBadge" class="text-xs text-gray-500"></div>
+                        <div class="flex items-center gap-2">
+                            <div id="sessionBadge" class="text-xs text-gray-500"></div>
+                            <button type="button" id="adminSessionsBtn" class="hidden text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-full font-medium transition-colors" title="Switch or manage sessions">
+                                <i class="fas fa-folder-open mr-1"></i> Sessions
+                            </button>
+                        </div>
                         <div id="historyChip" class="hidden text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">History</div>
                     </div>
                     <div class="p-8 text-center" id="question-container" aria-live="polite">
@@ -45,13 +51,13 @@
                     </div>
                 </div>
                 <div class="text-center flex justify-center gap-4 flex-wrap md:pb-24 pb-20">
-                    <button id="nextBtn" class="btn-primary text-white font-bold py-4 px-8 rounded-full text-lg shadow-lg">
+                    <button type="button" id="nextBtn" class="btn-primary text-white font-bold py-4 px-8 rounded-full text-lg shadow-lg">
                         <i class="fas fa-random mr-2"></i> Next
                     </button>
-                    <button id="undoBtn" class="btn-primary text-white font-bold py-4 px-8 rounded-full text-lg shadow-lg disabled:opacity-50" disabled>
+                    <button type="button" id="undoBtn" class="btn-primary text-white font-bold py-4 px-8 rounded-full text-lg shadow-lg disabled:opacity-50" disabled>
                         <i class="fas fa-rotate-left mr-2"></i> Undo
                     </button>
-                    <button id="resetBtn" class="btn-primary text-white font-bold py-4 px-8 rounded-full text-lg shadow-lg disabled:opacity-50" disabled>
+                    <button type="button" id="resetBtn" class="btn-primary text-white font-bold py-4 px-8 rounded-full text-lg shadow-lg disabled:opacity-50" disabled>
                         <i class="fas fa-broom mr-2"></i> Reset
                     </button>
                 </div>
@@ -65,6 +71,9 @@
     <script src="sessionStore.js"></script>
     <script src="selectionUtils.js"></script>
     <script src="askedList.js"></script>
+    <script src="sessionApi.js"></script>
+    <script src="ui-utils.js"></script>
+    <script src="dialogs.js"></script>
     <script src="sessionPicker.js"></script>
     <script src="script.js"></script>
     <script>

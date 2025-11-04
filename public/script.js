@@ -125,8 +125,7 @@
             resultsBtn.id = 'resultsBtn';
             resultsBtn.className = 'btn-primary text-white font-bold py-4 px-8 rounded-full text-lg shadow-lg';
             resultsBtn.textContent = 'Results';
-            const capParam = params.cap === '1' ? '&cap=1' : '';
-            resultsBtn.href = `/results.html?id=${encodeURIComponent(serverSessionId)}&key=${encodeURIComponent(serverSessionKey)}${capParam}`;
+            resultsBtn.href = `/results.html?id=${encodeURIComponent(serverSessionId)}&key=${encodeURIComponent(serverSessionKey)}&cap=1`;
             parent.appendChild(resultsBtn);
         }
 
@@ -170,6 +169,7 @@
         }
 
         async function serverLoadAndOpen() {
+            showLoading('Loading session...');
             try {
                 const data = await apiGetCapSession(serverSessionId, serverSessionKey);
                 const askedIds = mapAskedToIds(data.asked || []);
@@ -229,9 +229,14 @@
                     const answeredIds = Object.keys(idToAnswer);
                     window.AskedList.update(askedContainer, { askedIds: activeSession.askedIds, timestamps: activeSession.timestamps, answeredIds });
                 }
-                unlockApp();
+                if (typeof Dialogs !== 'undefined' && typeof Dialogs.unlockApp === 'function') {
+                    Dialogs.unlockApp();
+                }
             } catch (e) {
                 console.error('Failed to load server session');
+                toast('Failed to load session', { type: 'error' });
+            } finally {
+                hideLoading();
             }
         }
 
@@ -334,6 +339,18 @@
 
         async function onOpenSession(name) {
             if (!name) return;
+
+            // BUG FIX #1: In admin mode, sessions cannot be "opened" without capability keys
+            // The capability keys are only shown once at creation and cannot be recovered
+            const isAdminMode = window.location.href.includes('admin=1');
+            if (isAdminMode) {
+                toast('Sessions can only be accessed via their unique capability link. Please use the share link shown when you created the session.', {
+                    type: 'error',
+                    duration: 5000
+                });
+                return;
+            }
+
             if (isServerMode) {
                 activeSession = activeSession && activeSession.name ? activeSession : { name, askedIds: [], timestamps: [] };
                 window.__activeSessionName = name;
@@ -377,18 +394,6 @@
             if (nextBtn && typeof nextBtn.focus === 'function') { try { nextBtn.focus(); } catch {} }
             // Unlock UI if gated by session selection modal
             unlockApp();
-        }
-
-        function onCreateSession(name) {
-            const trimmed = (name || '').trim();
-            if (!trimmed) return;
-            if (!window.SessionStore.exists(trimmed)) {
-                try { window.SessionStore.create(trimmed); } catch {}
-            }
-            if (sessionPickerHost && window.SessionPicker) {
-                window.SessionPicker.updateSessions(sessionPickerHost, window.SessionStore.getAll());
-            }
-            onOpenSession(trimmed);
         }
 
         if (!nextBtn._boundClick) nextBtn.addEventListener('click', async () => {
@@ -622,11 +627,8 @@
         function renderSessionPickerInto(container) {
             if (container && window.SessionPicker) {
                 sessionPickerHost = container;
-                window.SessionPicker.render(container, {
-                    sessions: window.SessionStore.getAll(),
-                    onOpen: onOpenSession,
-                    onCreate: onCreateSession,
-                });
+                // Admin mode - sessions will be loaded after authentication via setAdminSessions()
+                window.SessionPicker.render(container);
             }
         }
 
@@ -640,104 +642,44 @@
                 if (resultsBtn) resultsBtn.classList.add('hidden');
                 const adminFab = document.getElementById('adminCreateBtn');
                 if (adminFab) adminFab.classList.add('hidden');
+                const adminSessionsBtn = document.getElementById('adminSessionsBtn');
+                if (adminSessionsBtn) adminSessionsBtn.classList.add('hidden');
                 if (questionCard) questionCard.classList.add('hidden');
             } catch {}
 
-            if (document.getElementById('sessionGateOverlay')) return;
-            const overlay = document.createElement('div');
-            overlay.id = 'sessionGateOverlay';
-            overlay.className = 'fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50';
-            const dialog = document.createElement('div');
-            dialog.className = 'bg-white rounded-lg p-4 w-full max-w-2xl shadow-lg';
-            dialog.setAttribute('role', 'dialog');
-            dialog.setAttribute('aria-modal', 'true');
-            dialog.setAttribute('aria-labelledby', 'gateTitle');
-            dialog.tabIndex = -1;
-            dialog.innerHTML = `
-                <h2 id="gateTitle" class="text-lg font-semibold mb-2">Start a session</h2>
-                <p id="gateHelper" class="text-sm text-gray-600 mb-3">Pick an existing session or create a new one to begin.</p>
-                <div id="sessionGateHost"></div>
-            `;
-            overlay.appendChild(dialog);
-            document.body.appendChild(overlay);
+            // Check if we're in admin mode
+            const isAdminMode = window.location.href.includes('admin=1');
 
-            const prevOverflow = document.body.style.overflow;
-            const prevPaddingRight = document.body.style.paddingRight;
-            const scrollBarWidth = window.innerWidth - document.documentElement.clientWidth;
-            if (scrollBarWidth > 0) {
-                document.body.style.paddingRight = String(scrollBarWidth) + 'px';
+            // In admin mode, AdminUI.init() will handle showing the session management UI
+            if (isAdminMode) {
+                return;
             }
-            document.body.style.overflow = 'hidden';
 
-            const focusableSelectors = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
-            function getFocusable() {
-                return Array.from(dialog.querySelectorAll(focusableSelectors)).filter(el => !el.disabled && el.offsetParent !== null);
-            }
-            overlay.addEventListener('keydown', (e) => {
-                if (e.key === 'Tab') {
-                    const focusables = getFocusable();
-                    if (focusables.length === 0) return;
-                    const first = focusables[0];
-                    const last = focusables[focusables.length - 1];
-                    if (e.shiftKey) {
-                        if (document.activeElement === first) { e.preventDefault(); last.focus(); }
-                    } else {
-                        if (document.activeElement === last) { e.preventDefault(); first.focus(); }
-                    }
-                }
-                if (e.key === 'Escape') { e.preventDefault(); }
-            });
-
-            // Dynamic helper text
-            try {
-                const gateHelper = dialog.querySelector('#gateHelper');
-                const sessions = window.SessionStore.getAll();
-                if (Array.isArray(sessions) && sessions.length === 0) {
-                    gateHelper.textContent = 'Create a new session to begin.';
-                } else {
-                    gateHelper.textContent = 'Pick an existing session or create a new one to begin.';
-                }
-            } catch {}
-
-            const host = dialog.querySelector('#sessionGateHost');
-            renderSessionPickerInto(host);
-            setTimeout(() => {
-                try {
-                    const first = getFocusable()[0];
-                    if (first) first.focus();
-                } catch {}
-            }, 0);
-
-            overlay._restore = () => {
-                document.body.style.overflow = prevOverflow;
-                document.body.style.paddingRight = prevPaddingRight;
-            };
-        }
-
-        function unlockApp() {
-            try {
-                if (askedContainer) askedContainer.classList.remove('hidden');
-                if (nextBtn) nextBtn.classList.remove('hidden');
-                if (undoBtn) undoBtn.classList.remove('hidden');
-                if (resetBtn) resetBtn.classList.remove('hidden');
-                ensureResultsButton();
-                if (resultsBtn) resultsBtn.classList.remove('hidden');
-                // Admin controls removed - now integrated with session picker
-                if (questionCard) questionCard.classList.remove('hidden');
-            } catch {}
-            const overlay = document.getElementById('sessionGateOverlay');
-            if (overlay) {
-                if (typeof overlay._restore === 'function') { try { overlay._restore(); } catch {} }
-                overlay.remove();
-            }
+            // For regular users, lockApp() is called to hide UI while showing session creation dialog
         }
         
-        // init: gate the app on load
-        if (!isServerMode) {
+        // init: determine mode on load
+        const isAdminMode = (() => {
+            try {
+                const params = new URLSearchParams(window.location.search);
+                return params.get('admin') === '1';
+            } catch {
+                return false;
+            }
+        })();
+
+        if (isServerMode) {
+            // User has capability link - load their session
+            serverLoadAndOpen();
+        } else if (isAdminMode) {
+            // Admin mode - show session management
             lockApp();
         } else {
-            // In server mode, load the remote session and unlock UI
-            serverLoadAndOpen();
+            // Regular user on homepage - prompt to create a new session
+            lockApp(); // Hide UI elements while showing creation prompt
+            if (typeof Dialogs !== 'undefined' && typeof Dialogs.showCreateSessionDialog === 'function') {
+                Dialogs.showCreateSessionDialog();
+            }
         }
         if (askedContainer && window.AskedList) {
             const questionsById = new Map();
@@ -788,402 +730,12 @@
             } catch {}
         });
 
- 
-// --- Admin setup modal + auto-verify ---
-(function () {
-    function toast(msg) {
-        const t = document.createElement('div');
-        t.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-sm px-3 py-1.5 rounded shadow';
-        t.textContent = msg;
-        document.body.appendChild(t);
-        setTimeout(() => { t.remove(); }, 2500);
-    }
-
-    async function validateAdminKey(key) {
-        const res = await fetch('/api/admin/sessions', { headers: { Authorization: 'Key ' + key } });
-        if (!res.ok) throw new Error('Invalid');
-        return res.json().catch(() => ({}));
-    }
-
-    async function deleteAdminSession(id, adminKey) {
-        const res = await fetch(`/api/admin/sessions/${id}`, {
-            method: 'DELETE',
-            headers: { Authorization: 'Key ' + adminKey }
-        });
-        if (!res.ok) throw new Error('Failed to delete');
-        return res.json();
-    }
-
-    function formatTimestamp(timestamp) {
-        if (!timestamp) return 'N/A';
-        const date = new Date(timestamp);
-        const now = new Date();
-        const diffMs = now - date;
-        const diffMins = Math.floor(diffMs / 60000);
-        const diffHours = Math.floor(diffMs / 3600000);
-        const diffDays = Math.floor(diffMs / 86400000);
-
-        if (diffMins < 1) return 'just now';
-        if (diffMins < 60) return `${diffMins}m ago`;
-        if (diffHours < 24) return `${diffHours}h ago`;
-        if (diffDays < 7) return `${diffDays}d ago`;
-        return date.toLocaleDateString();
-    }
-
-    function showAdminSessionsPanel(sessions, adminKey) {
-        // Remove existing panel if any
-        const existing = document.getElementById('adminSessionsPanel');
-        if (existing) existing.remove();
-
-        const panel = document.createElement('div');
-        panel.id = 'adminSessionsPanel';
-        panel.className = 'fixed bottom-20 right-6 bg-white rounded-lg shadow-xl border border-gray-200 w-96 max-h-96 overflow-hidden flex flex-col';
-        panel.style.zIndex = '50';
-
-        const header = document.createElement('div');
-        header.className = 'p-3 border-b border-gray-200 flex items-center justify-between bg-gray-50';
-        header.innerHTML = `
-            <div class="flex items-center gap-2">
-                <span class="text-sm font-semibold text-gray-700">Server Sessions</span>
-                <span class="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">${sessions.length}</span>
-            </div>
-            <button id="adminPanelClose" class="text-gray-400 hover:text-gray-600">
-                <i class="fas fa-times"></i>
-            </button>
-        `;
-
-        const listContainer = document.createElement('div');
-        listContainer.className = 'overflow-y-auto flex-1';
-
-        if (sessions.length === 0) {
-            listContainer.innerHTML = `
-                <div class="p-4 text-center text-gray-500 text-sm">
-                    <div class="mb-2"><i class="fas fa-info-circle"></i></div>
-                    <div>No sessions yet. Create one to get started!</div>
-                </div>
-            `;
-        } else {
-            const sortedSessions = [...sessions].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-            sortedSessions.forEach(session => {
-                const item = document.createElement('div');
-                item.className = 'p-3 border-b border-gray-100 hover:bg-gray-50 transition-colors';
-                item.innerHTML = `
-                    <div class="flex items-start justify-between gap-2">
-                        <div class="flex-1 min-w-0">
-                            <div class="text-sm font-medium text-gray-900 truncate">${escapeHtml(session.name)}</div>
-                            <div class="text-xs text-gray-500 mt-1">
-                                <div>Created: ${formatTimestamp(session.createdAt)}</div>
-                                <div>Last access: ${formatTimestamp(session.lastAccess)}</div>
-                            </div>
-                        </div>
-                        <button class="admin-delete-session text-xs text-red-600 hover:text-red-800 px-2 py-1 rounded hover:bg-red-50" data-session-id="${escapeHtml(session.id)}" title="Delete session">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
-                    <div class="mt-2 text-xs text-gray-400 font-mono truncate" title="${escapeHtml(session.id)}">ID: ${escapeHtml(session.id)}</div>
-                `;
-                listContainer.appendChild(item);
-            });
-        }
-
-        const footer = document.createElement('div');
-        footer.className = 'p-2 border-t border-gray-200 bg-yellow-50';
-        footer.innerHTML = `
-            <div class="text-xs text-yellow-800 flex items-start gap-2">
-                <i class="fas fa-exclamation-triangle mt-0.5"></i>
-                <div>Session links are only shown once at creation. Save them when creating sessions!</div>
-            </div>
-        `;
-
-        panel.appendChild(header);
-        panel.appendChild(listContainer);
-        panel.appendChild(footer);
-        document.body.appendChild(panel);
-
-        // Event handlers
-        const closeBtn = header.querySelector('#adminPanelClose');
-        closeBtn.addEventListener('click', () => panel.remove());
-
-        // Delete session handlers
-        const deleteButtons = listContainer.querySelectorAll('.admin-delete-session');
-        deleteButtons.forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                const sessionId = btn.dataset.sessionId;
-                const sessionItem = btn.closest('.p-3');
-                const sessionName = sessionItem.querySelector('.text-sm').textContent;
-
-                if (!confirm(`Delete session "${sessionName}"?\n\nThis cannot be undone.`)) return;
-
-                try {
-                    await deleteAdminSession(sessionId, adminKey);
-                    toast('Session deleted');
-                    // Refresh the panel
-                    const json = await validateAdminKey(adminKey);
-                    showAdminSessionsPanel(json.sessions || [], adminKey);
-                } catch (err) {
-                    toast('Failed to delete session');
-                    console.error('Delete failed:', err);
-                }
-            });
-        });
-    }
-
-    function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
-
-    function openShareLinksDialog(links) {
-        const overlay = document.createElement('div');
-        overlay.className = 'fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50';
-        const dialog = document.createElement('div');
-        dialog.className = 'bg-white rounded-lg p-4 w-full max-w-lg shadow-lg';
-        dialog.setAttribute('role', 'dialog');
-        dialog.setAttribute('aria-modal', 'true');
-        dialog.setAttribute('aria-labelledby', 'shareTitle');
-        dialog.tabIndex = -1;
-        const editLink = (links && links.edit) || '';
-        const viewLink = (links && links.view) || '';
-        dialog.innerHTML = `
-            <h2 id="shareTitle" class="text-sm font-semibold mb-2">Share links</h2>
-            <div class="text-xs text-gray-600 mb-3">Copy and share the appropriate link.</div>
-            <label class="block text-xs text-gray-700 mb-1">Edit link (full access)</label>
-            <div class="flex gap-2 mb-2">
-                <input id="shareEditInput" class="flex-1 w-full border border-gray-300 rounded px-2 py-1 text-xs" value="${editLink.replace(/"/g, '&quot;')}">
-                <button id="copyEdit" class="px-2 py-1 text-xs btn-primary text-white rounded">Copy</button>
-                <a id="openEdit" class="px-2 py-1 text-xs border border-gray-300 rounded" href="${editLink}" target="_blank" rel="noopener">Open</a>
-            </div>
-            <label class="block text-xs text-gray-700 mb-1 mt-3">View-only link</label>
-            <div class="flex gap-2 mb-4">
-                <input id="shareViewInput" class="flex-1 w-full border border-gray-300 rounded px-2 py-1 text-xs" value="${viewLink.replace(/"/g, '&quot;')}">
-                <button id="copyView" class="px-2 py-1 text-xs btn-primary text-white rounded">Copy</button>
-                <a id="openView" class="px-2 py-1 text-xs border border-gray-300 rounded" href="${viewLink}" target="_blank" rel="noopener">Open</a>
-            </div>
-            <div class="flex justify-end gap-2">
-                <button id="shareClose" class="px-3 py-1 border border-gray-300 rounded">Close</button>
-            </div>
-        `;
-        overlay.appendChild(dialog);
-        document.body.appendChild(overlay);
-        const prevOverflow = document.body.style.overflow;
-        const prevPaddingRight = document.body.style.paddingRight;
-        const scrollBarWidth = window.innerWidth - document.documentElement.clientWidth;
-        if (scrollBarWidth > 0) document.body.style.paddingRight = String(scrollBarWidth) + 'px';
-        document.body.style.overflow = 'hidden';
-        function close() {
-            overlay.remove();
-            document.body.style.overflow = prevOverflow;
-            document.body.style.paddingRight = prevPaddingRight;
-        }
-        function bindCopy(btnId, inputId) {
-            const btn = dialog.querySelector(btnId);
-            const input = dialog.querySelector(inputId);
-            if (!btn || !input) return;
-            btn.addEventListener('click', async () => {
-                try {
-                    await navigator.clipboard.writeText(input.value || '');
-                    toast('Copied');
-                } catch {
-                    try { input.select(); document.execCommand('copy'); toast('Copied'); } catch {}
-                }
-            });
-        }
-        bindCopy('#copyEdit', '#shareEditInput');
-        bindCopy('#copyView', '#shareViewInput');
-        const closeBtn = dialog.querySelector('#shareClose');
-        closeBtn.addEventListener('click', () => close());
-        setTimeout(() => { try { dialog.focus(); } catch {} }, 0);
-    }
-
-    function openCreateServerSessionDialog(adminKey) {
-        const overlay = document.createElement('div');
-        overlay.className = 'fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50';
-        const dialog = document.createElement('div');
-        dialog.className = 'bg-white rounded-lg p-4 w-full max-w-sm shadow-lg';
-        dialog.setAttribute('role', 'dialog');
-        dialog.setAttribute('aria-modal', 'true');
-        dialog.setAttribute('aria-labelledby', 'createTitle');
-        dialog.tabIndex = -1;
-        dialog.innerHTML = `
-            <h2 id="createTitle" class="text-sm font-semibold mb-2">Create server session</h2>
-            <label class="block text-xs text-gray-700 mb-1" for="createName">Session name</label>
-            <input id="createName" class="w-full border border-gray-300 rounded px-3 py-2 mb-3" placeholder="e.g., Weekly 1:1 - Alice">
-            <div class="flex justify-end gap-2">
-                <button id="createCancel" class="px-3 py-1 border border-gray-300 rounded">Cancel</button>
-                <button id="createConfirm" class="btn-primary text-white px-3 py-1 rounded">Create</button>
-            </div>
-        `;
-        overlay.appendChild(dialog);
-        document.body.appendChild(overlay);
-        const prevOverflow = document.body.style.overflow;
-        const prevPaddingRight = document.body.style.paddingRight;
-        const scrollBarWidth = window.innerWidth - document.documentElement.clientWidth;
-        if (scrollBarWidth > 0) document.body.style.paddingRight = String(scrollBarWidth) + 'px';
-        document.body.style.overflow = 'hidden';
-        function close() {
-            overlay.remove();
-            document.body.style.overflow = prevOverflow;
-            document.body.style.paddingRight = prevPaddingRight;
-        }
-        const input = dialog.querySelector('#createName');
-        const cancelBtn = dialog.querySelector('#createCancel');
-        const confirmBtn = dialog.querySelector('#createConfirm');
-        cancelBtn.addEventListener('click', () => close());
-        confirmBtn.addEventListener('click', async () => {
-            const name = (input.value || '').trim();
-            if (!name) return;
-            try {
-                const res = await fetch('/api/admin/sessions', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Authorization: 'Key ' + adminKey },
-                    body: JSON.stringify({ name })
-                });
-                if (!res.ok) throw new Error('Failed');
-                const json = await res.json();
-                close();
-                if (json && json.links) openShareLinksDialog(json.links);
-                // Refresh the sessions list
-                try {
-                    const updatedJson = await validateAdminKey(adminKey);
-                    const sessions = Array.isArray(updatedJson.sessions) ? updatedJson.sessions : [];
-                    loadAdminSessions(adminKey, sessions);
-                } catch (e) {
-                    console.error('Failed to refresh sessions:', e);
-                }
-            } catch {
-                toast('Failed to create');
-            }
-        });
-        setTimeout(() => { try { input.focus(); } catch {} }, 0);
-    }
-
-    function loadAdminSessions(adminKey, sessions) {
-        // Load sessions into the session picker's "Existing" tab
-        const sessionSection = document.getElementById('session-section');
-        if (sessionSection && window.SessionPicker) {
-            window.SessionPicker.setAdminSessions(sessionSection, sessions, adminKey);
-        }
-    }
-
-    function openAdminDialog(opts) {
-        opts = opts || {};
-        const existing = document.querySelector('[data-admin-dialog="true"]');
-        if (existing) {
-            const input = existing.querySelector('#adminKeyInput');
-            setTimeout(() => {
-                try { if (input) input.focus(); } catch {}
-            }, 0);
-            return;
-        }
-        const preset = typeof opts.preset === 'string' ? opts.preset : '';
-        const error = typeof opts.error === 'string' ? opts.error : '';
-        const overlay = document.createElement('div');
-        overlay.setAttribute('data-admin-dialog', 'true');
-        overlay.className = 'fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50';
-        const dialog = document.createElement('div');
-        dialog.className = 'bg-white rounded-lg p-4 w-full max-w-sm shadow-lg';
-        dialog.setAttribute('role', 'dialog');
-        dialog.setAttribute('aria-modal', 'true');
-        dialog.setAttribute('aria-labelledby', 'adminTitle');
-        dialog.tabIndex = -1;
-        const safePreset = preset.replace(/"/g, '&quot;');
-        dialog.innerHTML = `
-            <h2 id="adminTitle" class="text-sm font-semibold mb-2">Admin mode</h2>
-            <div class="text-sm mb-3">Enter the admin key to enable server-backed sessions.</div>
-            <label class="block text-xs text-gray-700 mb-1" for="adminKeyInput">Admin key</label>
-            <input id="adminKeyInput" type="password" class="w-full border border-gray-300 rounded-lg px-3 py-2 mb-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" value="${safePreset}">
-            ${error ? '<div class="text-xs text-red-600 mb-2">' + error + '</div>' : '<div class="mb-2"></div>'}
-            <div class="flex justify-end gap-2">
-                <button id="adminCancel" class="px-3 py-1 border border-gray-300 rounded">Cancel</button>
-                <button id="adminConfirm" class="btn-primary text-white px-3 py-1 rounded">Verify</button>
-            </div>
-        `;
-        overlay.appendChild(dialog);
-        document.body.appendChild(overlay);
-
-        const prevOverflow = document.body.style.overflow;
-        const prevPaddingRight = document.body.style.paddingRight;
-        const scrollBarWidth = window.innerWidth - document.documentElement.clientWidth;
-        if (scrollBarWidth > 0) document.body.style.paddingRight = String(scrollBarWidth) + 'px';
-        document.body.style.overflow = 'hidden';
-
-        const input = dialog.querySelector('#adminKeyInput');
-        const cancelBtn = dialog.querySelector('#adminCancel');
-        const confirmBtn = dialog.querySelector('#adminConfirm');
-
-        function close(options) {
-            options = options || {};
-            const restore = options.restore === false ? false : true;
-            overlay.remove();
-            if (restore) {
-                document.body.style.overflow = prevOverflow;
-                document.body.style.paddingRight = prevPaddingRight;
-            }
-        }
-
-        overlay.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') { e.preventDefault(); close(); }
-            if (e.key === 'Enter') { e.preventDefault(); confirmBtn.click(); }
-        });
-        cancelBtn.addEventListener('click', () => close());
-        confirmBtn.addEventListener('click', async () => {
-            const key = (input.value || '').trim();
-            if (!key) return;
-            try {
-                const json = await validateAdminKey(key);
-                try { sessionStorage.setItem('mfq_admin_key', key); } catch {}
-                close();
-                const sessions = Array.isArray(json.sessions) ? json.sessions : [];
-                const names = sessions.map(s => s.name).filter(Boolean);
-                toast(names.length ? 'Admin OK • ' + names.length + ' sessions' : 'Admin OK');
-                loadAdminSessions(key, sessions);
-            } catch (e) {
-                close({ restore: false });
-                openAdminDialog({ preset: input.value || '', error: 'Invalid admin key. Try again.' });
-            }
-        });
-
-        setTimeout(() => { try { input.focus(); } catch {} }, 0);
-    }
-
-    function init() {
-        try {
-            const u = new URL(window.location.href);
-            if (u.searchParams.get('admin') !== '1') return;
-        } catch { return; }
-
-        const banner = document.getElementById('adminBanner');
-        if (banner) banner.classList.remove('hidden');
-
-        let existing = '';
-        try { existing = sessionStorage.getItem('mfq_admin_key') || ''; } catch {}
-        if (!existing) {
-            openAdminDialog();
-            return;
-        }
-        validateAdminKey(existing).then((json) => {
-            // valid, load sessions into picker
-            const sessions = Array.isArray(json.sessions) ? json.sessions : [];
-            toast(sessions.length ? `Admin OK • ${sessions.length} sessions` : 'Admin OK');
-            loadAdminSessions(existing, sessions);
-        }).catch(() => {
-            openAdminDialog({ preset: existing, error: 'Saved key is no longer valid.' });
-        });
-    }
-
-    if (typeof window !== 'undefined') {
-        window.AdminUI = { init: init };
-    }
-})();
-
-// Auto-init in environments that don't execute inline HTML scripts (e.g., Jest jsdom)
+// Auto-init admin mode in environments that don't execute inline HTML scripts (e.g., Jest jsdom)
 (function(){
     try {
         const u = new URL(window.location.href);
-        if (u.searchParams.get('admin') === '1' && window.AdminUI && typeof window.AdminUI.init === 'function') {
-            window.AdminUI.init();
+        if (u.searchParams.get('admin') === '1' && typeof Dialogs !== 'undefined' && typeof Dialogs.initAdminUI === 'function') {
+            Dialogs.initAdminUI();
         }
     } catch {}
 })();

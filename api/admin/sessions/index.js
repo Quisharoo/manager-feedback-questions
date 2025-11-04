@@ -14,8 +14,14 @@ module.exports = async (req, res) => {
 
   if (req.method === 'GET') {
     const list = await store.listSessions();
-    // Hide sensitive hashes in admin list
-    const safe = list.map(s => ({ id: s.id, name: s.name, createdAt: s.createdAt, lastAccess: s.lastAccess }));
+    // Hide sensitive hashes in admin list, but include metadata needed for UI
+    const safe = list.map(s => ({ 
+      id: s.id, 
+      name: s.name, 
+      createdAt: s.createdAt, 
+      lastAccess: s.lastAccess,
+      asked: s.asked || [] // Include asked questions array for UI display
+    }));
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
     return res.end(JSON.stringify({ sessions: safe }));
@@ -48,7 +54,10 @@ module.exports = async (req, res) => {
     const host = (req.headers && req.headers.host) || '';
     const proto = (req.headers && req.headers['x-forwarded-proto']) || 'http';
     const base = `${proto}://${host}`;
-    const links = { edit: `${base}/?id=${session.id}&key=${editKey}&cap=1`, view: `${base}/results.html?id=${session.id}&key=${viewKey}&cap=1` };
+    const links = {
+      edit: `${base}/?id=${session.id}&key=${editKey}&cap=1`,
+      view: `${base}/results.html?id=${session.id}&key=${viewKey}&cap=1`
+    };
     res.statusCode = 201;
     res.setHeader('Content-Type', 'application/json');
     return res.end(JSON.stringify({ ...session, links }));
@@ -58,5 +67,4 @@ module.exports = async (req, res) => {
   res.setHeader('Allow', 'GET, POST');
   res.end('Method Not Allowed');
 };
-
 
