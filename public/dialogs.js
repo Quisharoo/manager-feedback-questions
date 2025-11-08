@@ -135,10 +135,14 @@
                 if (!links || !links.edit) {
                     throw new Error('Capability link not returned');
                 }
+
+                // Remove the create session overlay before showing share links
+                if (typeof overlay._restore === 'function') {
+                    overlay._restore();
+                }
+                overlay.remove();
+
                 openShareLinksDialog(links);
-                setTimeout(() => {
-                    window.location.href = links.edit;
-                }, 10000);
             } catch (e) {
                 console.error('Failed to create session:', e);
                 toast(`Failed to create session: ${e && e.message ? e.message : 'Unknown error'}`, { type: 'error', duration: 4000 });
@@ -435,28 +439,20 @@
                     <i class="fas fa-external-link-alt"></i>
                 </a>
             </div>
-            <div class="border-t pt-4 flex items-center justify-between gap-3">
-                <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                    <input type="checkbox" id="confirmSaved" class="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
-                    <span>I've saved these links</span>
-                </label>
-                <button id="shareClose" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all" disabled>
-                    Close
+            <div class="border-t pt-4 flex items-center justify-end gap-3">
+                <button id="shareClose" class="px-6 py-2 btn-primary text-white rounded-lg font-semibold hover:shadow-lg transition-all">
+                    <i class="fas fa-arrow-right mr-2"></i>Open Session
                 </button>
             </div>
         `;
         overlay.appendChild(dialog);
         document.body.appendChild(overlay);
-        const prevOverflow = document.body.style.overflow;
-        const prevPaddingRight = document.body.style.paddingRight;
+
+        // Prevent scrolling while dialog is open (will be cleaned up on navigation)
         const scrollBarWidth = window.innerWidth - document.documentElement.clientWidth;
         if (scrollBarWidth > 0) document.body.style.paddingRight = String(scrollBarWidth) + 'px';
         document.body.style.overflow = 'hidden';
-        function close() {
-            overlay.remove();
-            document.body.style.overflow = prevOverflow;
-            document.body.style.paddingRight = prevPaddingRight;
-        }
+
         function bindCopy(btnId, inputId) {
             const btn = dialog.querySelector(btnId);
             const input = dialog.querySelector(inputId);
@@ -491,16 +487,11 @@
         bindCopy('#copyEdit', '#shareEditInput');
         bindCopy('#copyView', '#shareViewInput');
 
-        // Enable close button only when checkbox is checked
         const closeBtn = dialog.querySelector('#shareClose');
-        const checkbox = dialog.querySelector('#confirmSaved');
-        if (checkbox && closeBtn) {
-            checkbox.addEventListener('change', () => {
-                closeBtn.disabled = !checkbox.checked;
-            });
-        }
-
-        closeBtn.addEventListener('click', () => close());
+        closeBtn.addEventListener('click', () => {
+            // Navigate to the edit link
+            window.location.href = editLink;
+        });
 
         // Auto-select first input for easy copying
         setTimeout(() => {
